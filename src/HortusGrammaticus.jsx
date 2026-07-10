@@ -15,14 +15,27 @@ const MAX_LEN = 260000; // cap on expanded grammar string
 const MAX_SEGS = 90000; // cap on drawn segments
 
 const C = {
-  page: "#0b1c2c",
+  // The light page — the vague blue-grey of the Northumberland sky, the same
+  // easy-to-look-at ground as or-ni-thology.cloud. The dark is lifted off.
+  page: "#e6eaec",
+  // The plates stay Prussian blue: the cyanotype soul is kept.
   plate: "#12314f",
   plateGlow: "#1b4266",
-  ink: "#eaf3f6",
-  faded: "#93b0bf",
-  dim: "#5f7d8e",
-  gold: "#d3ab6b",
-  line: "rgba(234,243,246,0.88)",
+  // Ink ON THE LIGHT PAGE — dark blue on light, so the eyes stay sensible.
+  // (It's the plate's own blue, so the text and the plates rhyme.)
+  ink: "#12314f",
+  faded: "#3f5a6b",
+  dim: "#586f7d",
+  // The gold accent, darkened so it reads on the light page.
+  gold: "#9c6b1f",
+  // Ink ON THE PLATES stays light — white specimens pressed on Prussian blue.
+  onInk: "#eaf3f6",
+  onFaded: "#a9c1cd",
+  onDim: "#8ba4b3",
+  // The plate's own light gold — the seed-bed root and its hover glow.
+  goldPlate: "#d3ab6b",
+  // Specimen lines, drawn light on the plate.
+  line: "rgba(234,243,246,0.9)",
 };
 
 const PRESETS = [
@@ -422,7 +435,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
             const [x1, y1, x2, y2] = edgeEnds(hover);
             return { x1: px(x1), y1: px(y1), x2: px(x2), y2: px(y2) };
           })()}
-          stroke={C.gold}
+          stroke={C.goldPlate}
           strokeWidth="4"
           strokeLinecap="round"
           opacity="0.35"
@@ -438,7 +451,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
             y1={px(y1)}
             x2={px(x2)}
             y2={px(y2)}
-            stroke={C.ink}
+            stroke={C.onInk}
             strokeWidth={rooted ? 3.5 : 2.5}
             strokeLinecap="round"
             opacity={rooted ? (hover === key ? 0.7 : 0.95) : 0.3}
@@ -447,8 +460,8 @@ function SeedTray({ strokes, setStrokes, drawn }) {
       })}
       {drawn.root && (
         <>
-          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="7" fill="none" stroke={C.gold} strokeWidth="1" opacity="0.5" />
-          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="3.5" fill={C.gold} />
+          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="7" fill="none" stroke={C.goldPlate} strokeWidth="1" opacity="0.5" />
+          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="3.5" fill={C.goldPlate} />
         </>
       )}
     </svg>
@@ -772,8 +785,9 @@ export default function HortusGrammaticus() {
             <div
               className="relative rounded-sm overflow-hidden"
               style={{
+                // A crisp 1px plate edge, and nothing else — no drop shadow.
+                // Flat: ink on a sheet, a sheet on the sky.
                 border: `1px solid ${C.plateGlow}`,
-                boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
               }}
             >
               <div ref={wrapRef} className="w-full" style={{ aspectRatio: "1 / 1.05" }}>
@@ -788,7 +802,7 @@ export default function HortusGrammaticus() {
                     fontFamily: "'Cormorant Garamond', Georgia, serif",
                     fontStyle: "italic",
                     fontSize: "1.2rem",
-                    color: C.faded,
+                    color: C.onFaded,
                     lineHeight: 1.5,
                   }}
                 >
@@ -800,14 +814,15 @@ export default function HortusGrammaticus() {
               {/* plate number */}
               <div
                 className="absolute top-3 right-4 text-xs"
-                style={{ color: C.dim, letterSpacing: "0.2em" }}
+                style={{ color: C.onDim, letterSpacing: "0.2em" }}
               >
                 PLATE {plateNo}
               </div>
 
-              {/* specimen label */}
-              <div className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-end justify-between gap-3"
-                style={{ background: "linear-gradient(to top, rgba(11,28,44,0.85), rgba(11,28,44,0))" }}>
+              {/* specimen label — sits straight on the plate now, no scrim
+                  (the bottom of the Prussian wash is dark enough to hold the
+                  light label; flat, as the house likes it). */}
+              <div className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-end justify-between gap-3">
                 <div>
                   <div
                     style={{
@@ -815,15 +830,16 @@ export default function HortusGrammaticus() {
                       fontStyle: "italic",
                       fontSize: "1.35rem",
                       lineHeight: 1.1,
+                      color: C.onInk,
                     }}
                   >
                     {label.latin}
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: C.faded }}>
+                  <div className="text-xs mt-0.5" style={{ color: C.onFaded }}>
                     {label.common}
                   </div>
                 </div>
-                <div className="text-right text-xs hidden sm:block" style={{ color: C.dim, maxWidth: "24ch" }}>
+                <div className="text-right text-xs hidden sm:block" style={{ color: C.onDim, maxWidth: "24ch" }}>
                   {label.note}
                 </div>
               </div>
@@ -897,16 +913,16 @@ export default function HortusGrammaticus() {
                     style={{
                       background: C.plate,
                       border: `1px solid ${C.plateGlow}`,
-                      color: C.ink,
+                      color: C.onInk,
                       maxHeight: "8rem",
                     }}
                   >
                     <div>
-                      <span style={{ color: C.dim }}>axiom&nbsp;&nbsp;</span>F
+                      <span style={{ color: C.onDim }}>axiom&nbsp;&nbsp;</span>F
                     </div>
                     <div style={{ wordBreak: "break-all" }}>
-                      <span style={{ color: C.dim }}>F → </span>
-                      {drawn.rule || <span style={{ color: C.dim }}>…</span>}
+                      <span style={{ color: C.onDim }}>F → </span>
+                      {drawn.rule || <span style={{ color: C.onDim }}>…</span>}
                     </div>
                   </div>
                   <p className="mt-1.5 text-xs leading-relaxed" style={{ color: C.dim }}>
@@ -1148,7 +1164,7 @@ export default function HortusGrammaticus() {
                         style={{
                           background: C.plate,
                           border: `1px solid ${C.plateGlow}`,
-                          color: C.ink,
+                          color: C.onInk,
                         }}
                         spellCheck={false}
                       />
@@ -1166,7 +1182,7 @@ export default function HortusGrammaticus() {
                         style={{
                           background: C.plate,
                           border: `1px solid ${C.plateGlow}`,
-                          color: C.ink,
+                          color: C.onInk,
                         }}
                         spellCheck={false}
                       />
