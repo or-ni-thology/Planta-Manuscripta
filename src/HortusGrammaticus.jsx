@@ -738,7 +738,6 @@ export default function HortusGrammaticus() {
       style={{ background: C.page, color: C.ink, fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }}
     >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap');
         input[type=range]{height:20px;background:transparent;}
         button:focus-visible, input:focus-visible, textarea:focus-visible, [role=button]:focus-visible, [role=application]:focus-visible{outline:2px solid ${C.gold};outline-offset:2px;}
         ::selection{background:${C.gold};color:${C.page};}

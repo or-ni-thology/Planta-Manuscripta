@@ -1,0 +1,18 @@
+/* Tailwind provides the layout utilities the tree tool was built with
+   (flex, gap, spacing, the responsive lg: breakpoints). This one import
+   pulls in Tailwind's reset + every utility class used in the component. */
+@import "tailwindcss";
+
+/* The toy paints its own full-bleed page (the cyanotype #0b1c2c) on its root
+   div. We echo it on the body so there's no white flash before React mounts —
+   important inside the WordPress iframe, where a flash would blink the site. */
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: #0b1c2c;
+  /* stops the phone rubber-banding past the ends of the plate */
+  overscroll-behavior-y: none;
+}
