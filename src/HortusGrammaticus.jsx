@@ -162,6 +162,12 @@ function turtleSegments(s, angleDeg, wildness, seed) {
     minY = 0,
     maxY = 0;
   const step = 10;
+  // branch tips — where leaves belong. A tip is the end of a branch that
+  // actually drew something: we mark one whenever a branch closes (`]`) or the
+  // string ends while the pen has drawn since the last fork. Stored as
+  // [x, y, heading] triples so a leaf can point the way the twig was going.
+  const tips = [];
+  let justDrew = false;
   for (const ch of s) {
     if (ch === "F" || ch === "G") {
       if (wildness > 0) a += (rand() - 0.5) * wildness * 0.045;
@@ -170,6 +176,7 @@ function turtleSegments(s, angleDeg, wildness, seed) {
       segs.push(x, y, nx, ny, depth);
       x = nx;
       y = ny;
+      justDrew = true;
       if (nx < minX) minX = nx;
       if (nx > maxX) maxX = nx;
       if (ny < minY) minY = ny;
@@ -180,16 +187,20 @@ function turtleSegments(s, angleDeg, wildness, seed) {
     else if (ch === "[") {
       stack.push(x, y, a, depth);
       depth = Math.min(depth + 1, 12);
+      justDrew = false; // a fresh branch hasn't drawn yet
     } else if (ch === "]") {
+      if (justDrew) tips.push(x, y, a); // the branch we're closing ended here
       if (stack.length >= 4) {
         depth = stack.pop();
         a = stack.pop();
         y = stack.pop();
         x = stack.pop();
       }
+      justDrew = false;
     }
   }
-  return { segs, bbox: [minX, minY, maxX, maxY] };
+  if (justDrew) tips.push(x, y, a); // an unbracketed trunk ends in a tip too
+  return { segs, tips, bbox: [minX, minY, maxX, maxY] };
 }
 
 // ————————————————————————————————————————————————
@@ -522,6 +533,7 @@ export default function HortusGrammaticus() {
   const [angle, setAngle] = useState(90); // true to the graph paper
   const [wildness, setWildness] = useState(0);
   const [seed, setSeed] = useState(7);
+  const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
   const [custom, setCustom] = useState(false);
   const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
 
@@ -668,7 +680,7 @@ export default function HortusGrammaticus() {
     const pad = 34;
 
     if (mode !== "p" && grown) {
-      const { segs, bbox } = grown;
+      const { segs, tips, bbox } = grown;
       const [minX, minY, maxX, maxY] = bbox;
       const bw = Math.max(1, maxX - minX);
       const bh = Math.max(1, maxY - minY);
@@ -693,8 +705,43 @@ export default function HortusGrammaticus() {
         ctx.globalAlpha = 1;
       };
 
+      // little translucent leaves at the branch tips — basic almond shapes
+      // pointing the way each twig was heading, light and see-through on the
+      // Prussian plate, so overlapping leaves build up into soft foliage.
+      const drawLeaves = () => {
+        if (!leaves || !tips.length) return;
+        // proportional to the twig (so a dense fern gets small leaves that
+        // don't blob together), but capped so a sparse hand-drawn plant with
+        // very long twigs still gets little basic leaves, not giant ones.
+        const len = Math.min(18 * scale, 28);
+        const wid = Math.min(6 * scale, 9);
+        ctx.lineCap = "round";
+        ctx.fillStyle = "rgba(234,243,246,0.22)";
+        ctx.strokeStyle = "rgba(234,243,246,0.45)";
+        ctx.lineWidth = Math.max(0.4, Math.min(1, scale * 1.6));
+        for (let k = 0; k < tips.length; k += 3) {
+          const bx = tips[k] * scale + ox;
+          const by = tips[k + 1] * scale + oy;
+          const ang = tips[k + 2];
+          const tx = bx + len * Math.cos(ang);
+          const ty = by + len * Math.sin(ang);
+          const mx = bx + len * 0.5 * Math.cos(ang);
+          const my = by + len * 0.5 * Math.sin(ang);
+          const px = Math.cos(ang + Math.PI / 2);
+          const py = Math.sin(ang + Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.quadraticCurveTo(mx + px * wid, my + py * wid, tx, ty);
+          ctx.quadraticCurveTo(mx - px * wid, my - py * wid, bx, by);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      };
+
       if (!animate || n < 60) {
         drawRange(0, n);
+        drawLeaves();
       } else {
         const frames = 85;
         const chunk = Math.max(1, Math.ceil(n / frames));
@@ -704,6 +751,7 @@ export default function HortusGrammaticus() {
           drawRange(i, next);
           i = next;
           if (i < n) rafRef.current = requestAnimationFrame(tick);
+          else drawLeaves();
         };
         rafRef.current = requestAnimationFrame(tick);
       }
@@ -746,7 +794,7 @@ export default function HortusGrammaticus() {
     }
 
     return () => cancelAnimationFrame(rafRef.current);
-  }, [mode, grown, divergence, count, floretSize, dims, reducedMotion]);
+  }, [mode, grown, leaves, divergence, count, floretSize, dims, reducedMotion]);
 
   const plateNo = custom
     ? "?"
@@ -838,34 +886,47 @@ export default function HortusGrammaticus() {
               background: C.panel,
             }}
           >
-            {/* specimen chooser — the same chips, now the drawer's first card.
-                Wide enough to pair the chips into two columns, so the drawer
-                stays a short instrument rather than a tall stack. */}
-            <DrawerCard label="Specimen" width={300}>
-              <div className="flex flex-wrap gap-1.5">
-                {PRESETS.map((p) => {
-                  const active = p.id === presetId && !custom;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => selectPreset(p)}
-                      className="px-2.5 py-1 rounded-full transition-colors"
-                      style={{
-                        border: `1px solid ${active ? C.ink : C.plateGlow}`,
-                        background: active ? C.ink : "transparent",
-                        color: active ? C.page : C.faded,
-                        fontStyle: "italic",
-                        fontFamily: "'Cormorant Garamond', Georgia, serif",
-                        fontSize: "0.85rem",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {p.latin}
-                    </button>
-                  );
-                })}
-              </div>
-            </DrawerCard>
+            {/* specimen chooser — each plant is its own plain drawer section
+                now, no pill borders: a row of italic Latin names you swipe
+                through, the chosen one quietly marked with a gold radix dot
+                (the same mark as the seed bed's root). Keeps the drawer short
+                and lets the plants be the focus. */}
+            {PRESETS.map((p) => {
+              const active = p.id === presetId && !custom;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => selectPreset(p)}
+                  title={p.common}
+                  style={{
+                    flex: "0 0 auto",
+                    border: "none",
+                    borderRight: `1px solid ${C.plateGlow}`,
+                    background: "transparent",
+                    cursor: "pointer",
+                    padding: "11px 16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 4,
+                    fontFamily: "'Cormorant Garamond', Georgia, serif",
+                    fontStyle: "italic",
+                    fontSize: "1rem",
+                    fontWeight: active ? 500 : 400,
+                    whiteSpace: "nowrap",
+                    color: active ? C.ink : C.faded,
+                  }}
+                >
+                  <span>{p.latin}</span>
+                  {/* the radix dot: gold when chosen, transparent otherwise so
+                      nothing shifts as you pick */}
+                  <span style={{ fontSize: 8, lineHeight: 1, color: active ? C.gold : "transparent" }}>
+                    ●
+                  </span>
+                </button>
+              );
+            })}
 
             {/* grammar & hand-drawn dials */}
             {mode !== "p" && (
@@ -933,6 +994,20 @@ export default function HortusGrammaticus() {
                     style={sliderStyle}
                     aria-label="Wildness — organic angle jitter"
                   />
+                </DrawerCard>
+                <DrawerCard label="Leaves" value={leaves ? "🍃" : null} width={112}>
+                  <button
+                    onClick={() => setLeaves((v) => !v)}
+                    aria-pressed={leaves}
+                    className="w-full py-1.5 text-xs rounded-sm transition-colors"
+                    style={{
+                      border: `1px solid ${leaves ? C.ink : C.plateGlow}`,
+                      background: leaves ? C.ink : "transparent",
+                      color: leaves ? C.page : C.faded,
+                    }}
+                  >
+                    {leaves ? "on" : "off"}
+                  </button>
                 </DrawerCard>
                 <DrawerCard width={130} last>
                   <button
