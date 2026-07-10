@@ -11,6 +11,9 @@ import { useState, useRef, useEffect, useMemo } from "react";
 // ————————————————————————————————————————————————
 
 const GOLDEN = 137.50776405003785;
+// The golden angle for a BRANCH, measured from the underside — the stem keeps
+// going and the branch opens 180° − 137.508° away from it. Golden-angle ferns.
+const PHI_BRANCH = 180 - GOLDEN;
 const MAX_LEN = 260000; // cap on expanded grammar string
 const MAX_SEGS = 90000; // cap on drawn segments
 
@@ -39,9 +42,21 @@ const C = {
   goldPlate: "#d3ab6b",
   // Specimen lines, drawn light on the plate.
   line: "rgba(234,243,246,0.9)",
+  // Leaf mode — the plate goes transparent and the tree goes living:
+  // brown wood, translucent green leaves, straight onto the sky.
+  branch: "#5e4426",
+  leafFill: "rgba(74,124,63,0.25)",
+  leafStroke: "rgba(74,124,63,0.5)",
 };
 
 const PRESETS = [
+  {
+    // First in the drawer — the plant in Alison's own hand leads the row.
+    id: "hand",
+    type: "d",
+    latin: "Planta manuscripta",
+    common: "the hand-written plant",
+  },
   {
     id: "fern",
     type: "l",
@@ -91,12 +106,6 @@ const PRESETS = [
     wildness: 0,
   },
   {
-    id: "hand",
-    type: "d",
-    latin: "Planta manuscripta",
-    common: "the hand-written plant",
-  },
-  {
     id: "sunflower",
     type: "p",
     latin: "Helianthus aureus",
@@ -106,6 +115,10 @@ const PRESETS = [
     size: 4,
   },
 ];
+
+// The app opens on the fern — Filix mathematica is too beautiful not to greet
+// you — even though Planta manuscripta leads the drawer for playing.
+const FERN = PRESETS.find((p) => p.id === "fern");
 
 // deterministic little chaos
 function mulberry32(seed) {
@@ -212,6 +225,14 @@ function turtleSegments(s, angleDeg, wildness, seed) {
 // node is the root; a depth-first walk over the strokes
 // transcribes it into turtle speech, bracketing every
 // side-branch so the pen always finds its way home.
+//
+// GEMMAE — buds. Tap a lattice crossing to plant one.
+// A bud becomes a silent X in the grammar: the walk speaks
+// "[X]" when it passes, and the rules become fern-shaped —
+//   X → the gesture (with X's at the buds)
+//   F → FF (old wood stretches)
+// so the whole pattern regrows at every bud, each
+// generation, pointing the way the walk was going.
 // ————————————————————————————————————————————————
 
 const TRAY_N = 10; // cells per side
@@ -227,8 +248,17 @@ function edgeEnds(key) {
     : [x, y, x, y + 1];
 }
 
-function deriveGrammar(strokes) {
-  const empty = { rule: "", rooted: new Set(), root: null, edgeCount: 0, loose: 0, dynMax: 8 };
+function deriveGrammar(strokes, buds) {
+  const empty = {
+    rule: "",
+    rooted: new Set(),
+    root: null,
+    edgeCount: 0,
+    loose: 0,
+    dynMax: 8,
+    hasBuds: false,
+    buddedNodes: new Set(),
+  };
   if (!strokes || strokes.size === 0) return empty;
 
   // adjacency: "x,y" → [{to, dir, key}] · dirs: 0 right, 1 down, 2 left, 3 up
@@ -301,6 +331,15 @@ function deriveGrammar(strokes) {
   // stroke is spoken exactly once; brackets bring the pen home)
   const visited = new Set();
   const out = [];
+  // a bud speaks once, the first time the walk reaches its crossing —
+  // bracketed, so the regrown pattern is a side-shoot and the pen carries on
+  const buddedNodes = new Set();
+  const maybeBud = (node) => {
+    if (buds && buds.has(node) && !buddedNodes.has(node)) {
+      buddedNodes.add(node);
+      out.push("[X]");
+    }
+  };
   const TURN = ["", "-", "++", "+"]; // by (dir − heading) mod 4
   const PRIO = { 3: 0, 2: 1, 1: 2, 0: 3 }; // branch left & right first, run straight last
   const walk = (node, heading) => {
@@ -317,18 +356,41 @@ function deriveGrammar(strokes) {
         out.push(t + "F");
         node = e.to;
         heading = e.dir;
+        maybeBud(node);
       } else {
         out.push("[" + t + "F");
+        maybeBud(e.to);
         walk(e.to, e.dir);
         out.push("]");
       }
     }
   };
+  maybeBud(root); // a bud on the root itself is welcome
   walk(root, 3); // the pen begins at the root, facing up
 
   const edgeCount = best.edgeKeys.size;
-  const E = Math.max(2, edgeCount);
-  const dynMax = Math.max(2, Math.min(8, Math.floor(Math.log(120000) / Math.log(E))));
+  const hasBuds = buddedNodes.size > 0;
+  let dynMax;
+  if (hasBuds) {
+    // fern arithmetic: F(n+1) = 2F(n) + E·X(n), X(n+1) = B·X(n) — walk the
+    // recurrence until the wood outgrows the pot, that's the slider's ceiling
+    const E = edgeCount;
+    const B = buddedNodes.size;
+    let f = 0,
+      x = 1,
+      n = 0;
+    while (n < 8) {
+      const nf = 2 * f + E * x;
+      if (nf > 120000) break;
+      f = nf;
+      x = B * x;
+      n++;
+    }
+    dynMax = Math.max(2, n);
+  } else {
+    const E = Math.max(2, edgeCount);
+    dynMax = Math.max(2, Math.min(8, Math.floor(Math.log(120000) / Math.log(E))));
+  }
   return {
     rule: out.join(""),
     rooted: best.edgeKeys,
@@ -336,14 +398,17 @@ function deriveGrammar(strokes) {
     edgeCount,
     loose: strokes.size - edgeCount,
     dynMax,
+    hasBuds,
+    buddedNodes,
   };
 }
 
-// the drawable graph paper
-function SeedTray({ strokes, setStrokes, drawn }) {
+// the drawable graph paper. Edges are inked by tap or drag; the crossings
+// themselves take a tap to plant (or lift) a gemma — a bud.
+function SeedTray({ strokes, setStrokes, buds, setBuds, drawn }) {
   const svgRef = useRef(null);
   const drag = useRef({ active: false, mode: null });
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useState(null); // an edge key, or "N:x,y" for a crossing
 
   const toGrid = (e) => {
     const r = svgRef.current.getBoundingClientRect();
@@ -377,6 +442,15 @@ function SeedTray({ strokes, setStrokes, drawn }) {
     return (h ?? v)?.key ?? null;
   };
 
+  // nearest lattice crossing — the dead zones pick() leaves around the
+  // corners are exactly where a bud tap lands
+  const pickNode = (gx, gy) => {
+    const nx = Math.round(gx),
+      ny = Math.round(gy);
+    if (nx < 0 || nx > TRAY_N || ny < 0 || ny > TRAY_N) return null;
+    return Math.hypot(gx - nx, gy - ny) < 0.28 ? `${nx},${ny}` : null;
+  };
+
   const setEdge = (key, on) => {
     setStrokes((prev) => {
       if (prev.has(key) === on) return prev;
@@ -392,6 +466,21 @@ function SeedTray({ strokes, setStrokes, drawn }) {
     svgRef.current.setPointerCapture?.(e.pointerId);
     const [gx, gy] = toGrid(e);
     const key = pick(gx, gy);
+    if (!key) {
+      // no edge under the finger — a crossing means a bud, in or out
+      const node = pickNode(gx, gy);
+      if (node) {
+        setBuds((prev) => {
+          const next = new Set(prev);
+          if (next.has(node)) next.delete(node);
+          else next.add(node);
+          return next;
+        });
+        drag.current.active = false;
+        drag.current.mode = null;
+        return;
+      }
+    }
     drag.current.active = true;
     drag.current.mode = key ? !strokes.has(key) : null;
     if (key) setEdge(key, drag.current.mode);
@@ -400,7 +489,8 @@ function SeedTray({ strokes, setStrokes, drawn }) {
     const [gx, gy] = toGrid(e);
     const key = pick(gx, gy);
     if (!drag.current.active) {
-      setHover(key);
+      const node = key ? null : pickNode(gx, gy);
+      setHover(key ?? (node ? `N:${node}` : null));
       return;
     }
     if (!key) return;
@@ -435,7 +525,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
         background: C.plate,
       }}
       role="application"
-      aria-label="Seed bed — a drawable grid. Ink edges to compose the first generation."
+      aria-label="Seed bed — a drawable grid. Ink edges to compose the first generation; tap a crossing to plant a bud."
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
@@ -443,7 +533,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
       onPointerLeave={() => setHover(null)}
     >
       {gridLines}
-      {hover && !strokes.has(hover) && (
+      {hover && hover[0] !== "N" && !strokes.has(hover) && (
         <line
           {...(() => {
             const [x1, y1, x2, y2] = edgeEnds(hover);
@@ -452,6 +542,19 @@ function SeedTray({ strokes, setStrokes, drawn }) {
           stroke={C.goldPlate}
           strokeWidth="4"
           strokeLinecap="round"
+          opacity="0.35"
+        />
+      )}
+      {hover && hover[0] === "N" && (
+        <circle
+          {...(() => {
+            const [x, y] = hover.slice(2).split(",").map(Number);
+            return { cx: px(x), cy: px(y) };
+          })()}
+          r="6"
+          fill="none"
+          stroke={C.goldPlate}
+          strokeWidth="1.5"
           opacity="0.35"
         />
       )}
@@ -472,6 +575,23 @@ function SeedTray({ strokes, setStrokes, drawn }) {
           />
         );
       })}
+      {/* gemmae — hollow gold rings; pale when not joined to the plant */}
+      {[...buds].map((node) => {
+        const [x, y] = node.split(",").map(Number);
+        const rooted = drawn.buddedNodes.has(node);
+        return (
+          <circle
+            key={`b${node}`}
+            cx={px(x)}
+            cy={px(y)}
+            r="4.5"
+            fill={C.plate}
+            stroke={C.goldPlate}
+            strokeWidth="1.5"
+            opacity={rooted ? 0.95 : 0.35}
+          />
+        );
+      })}
       {drawn.root && (
         <>
           <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="7" fill="none" stroke={C.goldPlate} strokeWidth="1" opacity="0.5" />
@@ -486,13 +606,18 @@ function SeedTray({ strokes, setStrokes, drawn }) {
 // One card of the potting-bench drawer — a fixed-width cell divided from its
 // neighbour by a blue rule, a small mono caption + value up top, the control
 // below. The drawer scrolls sideways when the cards outrun the phone, exactly
-// as Mooring's tool drawer does.
+// as Mooring's tool drawer does. Every cell is the same fixed height: a tool
+// that needs more room goes LONG (another cell), never TALL.
+const DRAWER_H = 76;
+
 function DrawerCard({ label, value, valueColor, width = 152, last = false, children }) {
   return (
     <div
       style={{
         flex: "0 0 auto",
         width,
+        height: DRAWER_H,
+        boxSizing: "border-box",
         borderRight: last ? "none" : `1px solid ${C.plateGlow}`,
         padding: "11px 14px",
         display: "flex",
@@ -516,34 +641,92 @@ function DrawerCard({ label, value, valueColor, width = 152, last = false, child
   );
 }
 
+// A plain drawer action — out of its pill: small uppercase text sitting in its
+// own compartment, marked with the same gold radix dot the specimens use when
+// something is switched on.
+function DrawerAction({ onClick, active = false, dot = false, title, last = false, width = 118, children }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-pressed={dot ? active : undefined}
+      style={{
+        flex: "0 0 auto",
+        width,
+        height: DRAWER_H,
+        boxSizing: "border-box",
+        border: "none",
+        borderRight: last ? "none" : `1px solid ${C.plateGlow}`,
+        background: "transparent",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        fontSize: 11,
+        textTransform: "uppercase",
+        letterSpacing: "0.1em",
+        color: active ? C.ink : C.faded,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span>{children}</span>
+      {dot && (
+        <span style={{ fontSize: 8, lineHeight: 1, color: active ? C.gold : "transparent" }}>●</span>
+      )}
+    </button>
+  );
+}
+
+// The little round snap chip — gold-rimmed, filled when the dial sits on it.
+function SnapChip({ on, onClick, title, children }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="px-2 rounded-full"
+      style={{
+        border: `1px solid ${C.gold}`,
+        color: on ? C.page : C.gold,
+        background: on ? C.gold : "transparent",
+        fontSize: 11,
+        lineHeight: "18px",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ————————————————————————————————————————————————
 
 export default function HortusGrammaticus() {
-  // Open on the hand-drawn plant (Planta manuscripta) — the thing Alison plays
-  // with. The seed bed is the front door.
-  const [presetId, setPresetId] = useState("hand");
+  // Open on the fern, for admiring; Planta manuscripta waits first in the
+  // drawer, one tap away, for playing.
+  const [presetId, setPresetId] = useState("fern");
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
 
-  // L-system state. (axiom/rules keep the fern's defaults so the grammar editor
-  // has something to show if you switch to a preset; unused while hand-drawing.)
-  const [axiom, setAxiom] = useState(PRESETS[0].axiom);
-  const [rulesText, setRulesText] = useState(PRESETS[0].rules);
-  const [iterations, setIterations] = useState(1); // begin with the drawing itself
-  const [maxIter, setMaxIter] = useState(PRESETS[0].maxIter);
-  const [angle, setAngle] = useState(90); // true to the graph paper
-  const [wildness, setWildness] = useState(0);
+  const [axiom, setAxiom] = useState(FERN.axiom);
+  const [rulesText, setRulesText] = useState(FERN.rules);
+  const [iterations, setIterations] = useState(FERN.iterations);
+  const [maxIter, setMaxIter] = useState(FERN.maxIter);
+  const [angle, setAngle] = useState(FERN.angle);
+  const [wildness, setWildness] = useState(FERN.wildness);
   const [seed, setSeed] = useState(7);
   const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
   const [custom, setCustom] = useState(false);
-  const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
+  const [mode, setMode] = useState("l"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
 
   // draft grammar (edited but not yet grown)
-  const [draftAxiom, setDraftAxiom] = useState(PRESETS[0].axiom);
-  const [draftRules, setDraftRules] = useState(PRESETS[0].rules);
+  const [draftAxiom, setDraftAxiom] = useState(FERN.axiom);
+  const [draftRules, setDraftRules] = useState(FERN.rules);
   const [showGrammar, setShowGrammar] = useState(false);
 
-  // hand-drawn strokes on the seed bed (survive changes of specimen)
+  // hand-drawn strokes on the seed bed (survive changes of specimen),
+  // and the gemmae — budded crossings where the pattern regrows
   const [strokes, setStrokes] = useState(() => new Set());
+  const [buds, setBuds] = useState(() => new Set());
 
   // phyllotaxis state
   const [divergence, setDivergence] = useState(GOLDEN);
@@ -593,6 +776,23 @@ export default function HortusGrammaticus() {
     setSeed((s) => (s * 16807 + 13) % 2147483647);
   }
 
+  // press the current plate into a PNG — an arboretum for the phone.
+  // (In leaf mode the plate is transparent, so the tree travels bare.)
+  function downloadPlate() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+      const name = label.latin.toLowerCase().replace(/[^a-z]+/g, "-");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${name}-${stamp}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  }
+
   function applyGrammar() {
     setAxiom(draftAxiom);
     setRulesText(draftRules);
@@ -603,16 +803,17 @@ export default function HortusGrammaticus() {
   }
 
   // the seed bed's transcription
-  const drawn = useMemo(() => deriveGrammar(strokes), [strokes]);
+  const drawn = useMemo(() => deriveGrammar(strokes, buds), [strokes, buds]);
 
   // carry the hand-written rule into the text editor for refinement
   function refineAsText() {
-    const r = `F → ${drawn.rule}`;
+    const ax = drawn.hasBuds ? "X" : "F";
+    const r = drawn.hasBuds ? `X → ${drawn.rule}\nF → FF` : `F → ${drawn.rule}`;
     setMode("l");
     setCustom(true);
-    setAxiom("F");
+    setAxiom(ax);
     setRulesText(r);
-    setDraftAxiom("F");
+    setDraftAxiom(ax);
     setDraftRules(r);
     setMaxIter(8);
     setShowGrammar(true);
@@ -637,8 +838,14 @@ export default function HortusGrammaticus() {
     let ax, rules, iters;
     if (mode === "d") {
       if (!drawn.rule) return null;
-      ax = "F";
-      rules = { F: drawn.rule };
+      if (drawn.hasBuds) {
+        // fern-shaped: the gesture regrows at every bud, the wood stretches
+        ax = "X";
+        rules = { X: drawn.rule, F: "FF" };
+      } else {
+        ax = "F";
+        rules = { F: drawn.rule };
+      }
       iters = Math.min(iterations, drawn.dynMax);
     } else {
       ax = axiom;
@@ -650,6 +857,10 @@ export default function HortusGrammaticus() {
     return { ...t, gens, pruned };
   }, [mode, axiom, rulesText, iterations, angle, wildness, seed, drawn]);
 
+  // leaf mode turns the whole plate living: no cyanotype wash (the sky shows
+  // through), brown wood, translucent green leaves. Phyllotaxis stays blue.
+  const leafy = leaves && mode !== "p";
+
   // render
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -660,19 +871,24 @@ export default function HortusGrammaticus() {
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // cyanotype plate wash
-    const g = ctx.createRadialGradient(
-      dims.w / 2,
-      dims.h / 2,
-      Math.min(dims.w, dims.h) * 0.1,
-      dims.w / 2,
-      dims.h / 2,
-      Math.max(dims.w, dims.h) * 0.75
-    );
-    g.addColorStop(0, C.plateGlow);
-    g.addColorStop(1, C.plate);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, dims.w, dims.h);
+    if (leafy) {
+      // a transparent plate — the tree sits straight on the page
+      ctx.clearRect(0, 0, dims.w, dims.h);
+    } else {
+      // cyanotype plate wash
+      const g = ctx.createRadialGradient(
+        dims.w / 2,
+        dims.h / 2,
+        Math.min(dims.w, dims.h) * 0.1,
+        dims.w / 2,
+        dims.h / 2,
+        Math.max(dims.w, dims.h) * 0.75
+      );
+      g.addColorStop(0, C.plateGlow);
+      g.addColorStop(1, C.plate);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, dims.w, dims.h);
+    }
 
     cancelAnimationFrame(rafRef.current);
     const animate = animateNext.current && !reducedMotion;
@@ -694,7 +910,7 @@ export default function HortusGrammaticus() {
         for (let i = from; i < to; i++) {
           const j = i * 5;
           const d = segs[j + 4];
-          ctx.strokeStyle = C.line;
+          ctx.strokeStyle = leafy ? C.branch : C.line;
           ctx.globalAlpha = Math.max(0.35, 0.95 - d * 0.055);
           ctx.lineWidth = Math.max(0.55, 2.4 - d * 0.3);
           ctx.beginPath();
@@ -705,9 +921,10 @@ export default function HortusGrammaticus() {
         ctx.globalAlpha = 1;
       };
 
-      // little translucent leaves at the branch tips — basic almond shapes
-      // pointing the way each twig was heading, light and see-through on the
-      // Prussian plate, so overlapping leaves build up into soft foliage.
+      // little translucent green leaves at the branch tips — basic almond
+      // shapes pointing the way each twig was heading, see-through so
+      // overlapping leaves build up into soft foliage. Only the upper reaches
+      // of the tree get them; the lower trunk stays bare wood.
       const drawLeaves = () => {
         if (!leaves || !tips.length) return;
         // proportional to the twig (so a dense fern gets small leaves that
@@ -715,11 +932,13 @@ export default function HortusGrammaticus() {
         // very long twigs still gets little basic leaves, not giant ones.
         const len = Math.min(18 * scale, 28);
         const wid = Math.min(6 * scale, 9);
+        const yCut = minY + (maxY - minY) * 0.7 + 0.001; // leaves live above this line
         ctx.lineCap = "round";
-        ctx.fillStyle = "rgba(234,243,246,0.22)";
-        ctx.strokeStyle = "rgba(234,243,246,0.45)";
+        ctx.fillStyle = C.leafFill;
+        ctx.strokeStyle = C.leafStroke;
         ctx.lineWidth = Math.max(0.4, Math.min(1, scale * 1.6));
         for (let k = 0; k < tips.length; k += 3) {
+          if (tips[k + 1] > yCut) continue;
           const bx = tips[k] * scale + ox;
           const by = tips[k + 1] * scale + oy;
           const ang = tips[k + 2];
@@ -796,13 +1015,10 @@ export default function HortusGrammaticus() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [mode, grown, leaves, divergence, count, floretSize, dims, reducedMotion]);
 
-  const plateNo = custom
-    ? "?"
-    : ["I", "II", "III", "IV", "V", "VI"][PRESETS.findIndex((p) => p.id === presetId)];
-
   const nearGolden = Math.abs(divergence - GOLDEN) < 0.02;
-  const deltaPhi = divergence - GOLDEN;
   const onSquare = Math.abs(angle - 90) < 0.25;
+  const onPhiAngle = Math.abs(angle - PHI_BRANCH) < 0.02;
+  const angleDisp = Math.round(angle * 10) / 10;
 
   const genMax = mode === "d" ? drawn.dynMax : maxIter;
   const genValue = Math.min(iterations, genMax);
@@ -812,22 +1028,15 @@ export default function HortusGrammaticus() {
       ? {
           latin: "Planta manuscripta",
           common: "the hand-written plant",
-          note: drawn.rule
-            ? `${drawn.edgeCount} strokes · θ ${angle}° · gen ${grown?.gens ?? 1}`
-            : "awaiting its first stroke",
         }
       : mode === "l"
       ? {
           latin: custom ? "Specimen incognita" : preset.latin,
           common: custom ? "raised from your own grammar" : preset.common,
-          note: `${rulesText.split("\n")[0].replace(/\s+/g, " ")} · θ ${angle}° · gen ${
-            grown?.gens ?? iterations
-          }`,
         }
       : {
           latin: preset.latin,
           common: preset.common,
-          note: `θₙ = n · ${divergence.toFixed(3)}° · rₙ = c√n · ${count} florets`,
         };
 
   const sliderStyle = { accentColor: C.ink, width: "100%" };
@@ -845,27 +1054,10 @@ export default function HortusGrammaticus() {
       `}</style>
 
       <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
-        {/* ——— header ——— */}
-        <header className="mb-8 md:mb-10">
-          <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.3em" }}>
-            Cyanotype plates · rewriting systems
-          </div>
-          <h1
-            className="mt-2"
-            style={{
-              fontFamily: "'Cormorant Garamond', Georgia, serif",
-              fontWeight: 500,
-              fontSize: "clamp(2.2rem, 5vw, 3.6rem)",
-              lineHeight: 1.05,
-            }}
-          >
-            Hortus Grammaticus
-          </h1>
-          <p className="mt-2 text-sm" style={{ color: C.faded, maxWidth: "42ch" }}>
-            A herbarium of growing rules, pressed in Prussian blue. Choose a specimen; bend
-            its grammar; watch it become.
-          </p>
-        </header>
+        {/* ——— header ——— brutally cut off, on purpose: a blank space held
+            open for an illustrated title Alison will grow with the toy itself
+            (she can grow words into trees now). */}
+        <header aria-hidden="true" style={{ height: "clamp(90px, 14vh, 160px)" }} />
 
         {/* Everything stacks in one centred column now: the potting-bench
             drawer of controls on top, the tree plate below it, then (hand mode)
@@ -900,6 +1092,8 @@ export default function HortusGrammaticus() {
                   title={p.common}
                   style={{
                     flex: "0 0 auto",
+                    height: DRAWER_H,
+                    boxSizing: "border-box",
                     border: "none",
                     borderRight: `1px solid ${C.plateGlow}`,
                     background: "transparent",
@@ -945,43 +1139,34 @@ export default function HortusGrammaticus() {
                 </DrawerCard>
                 <DrawerCard
                   label="Angle"
-                  value={`${angle}°`}
-                  valueColor={mode === "d" && onSquare ? C.gold : C.ink}
-                  width={mode === "d" ? 198 : 150}
+                  value={`${angleDisp}°`}
+                  valueColor={onSquare || onPhiAngle ? C.gold : C.ink}
+                  width={150}
                 >
                   <input
                     type="range"
                     min={2}
-                    max={mode === "d" ? 160 : 90}
+                    max={160}
                     step={0.5}
                     value={angle}
                     onChange={(e) => setAngle(+e.target.value)}
-                    style={{ ...sliderStyle, accentColor: mode === "d" && onSquare ? C.gold : C.ink }}
+                    style={{ ...sliderStyle, accentColor: onSquare || onPhiAngle ? C.gold : C.ink }}
                     aria-label="Branching angle"
                   />
-                  {mode === "d" && (
-                    <div className="flex items-center justify-between" style={{ gap: 6 }}>
-                      <span style={{ fontSize: 10, color: onSquare ? C.gold : C.dim, whiteSpace: "nowrap" }}>
-                        {onSquare
-                          ? "true to the paper"
-                          : `${angle > 90 ? "+" : "−"}${Math.abs(angle - 90).toFixed(1)}° off square`}
-                      </span>
-                      <button
-                        onClick={() => setAngle(90)}
-                        className="px-2 rounded-full"
-                        style={{
-                          border: `1px solid ${C.gold}`,
-                          color: onSquare ? C.page : C.gold,
-                          background: onSquare ? C.gold : "transparent",
-                          fontSize: 11,
-                          lineHeight: "18px",
-                        }}
-                        title="Snap to the right angle, 90°"
-                      >
-                        ∟
-                      </button>
-                    </div>
-                  )}
+                </DrawerCard>
+                <DrawerCard label="Snap" width={104}>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                    <SnapChip on={onSquare} onClick={() => setAngle(90)} title="Snap to the right angle, 90°">
+                      ∟
+                    </SnapChip>
+                    <SnapChip
+                      on={onPhiAngle}
+                      onClick={() => setAngle(PHI_BRANCH)}
+                      title="Snap to the golden angle, measured from the underside of the branch — 42.492°"
+                    >
+                      φ
+                    </SnapChip>
+                  </div>
                 </DrawerCard>
                 <DrawerCard label="Wildness" value={wildness} width={150}>
                   <input
@@ -995,29 +1180,21 @@ export default function HortusGrammaticus() {
                     aria-label="Wildness — organic angle jitter"
                   />
                 </DrawerCard>
-                <DrawerCard label="Leaves" value={leaves ? "🍃" : null} width={112}>
-                  <button
-                    onClick={() => setLeaves((v) => !v)}
-                    aria-pressed={leaves}
-                    className="w-full py-1.5 text-xs rounded-sm transition-colors"
-                    style={{
-                      border: `1px solid ${leaves ? C.ink : C.plateGlow}`,
-                      background: leaves ? C.ink : "transparent",
-                      color: leaves ? C.page : C.faded,
-                    }}
-                  >
-                    {leaves ? "on" : "off"}
-                  </button>
-                </DrawerCard>
-                <DrawerCard width={130} last>
-                  <button
-                    onClick={growAgain}
-                    className="w-full py-2 text-sm rounded-sm transition-colors"
-                    style={{ border: `1px solid ${C.ink}`, color: C.ink, background: "transparent" }}
-                  >
-                    Grow again
-                  </button>
-                </DrawerCard>
+                <DrawerAction
+                  onClick={() => setLeaves((v) => !v)}
+                  active={leaves}
+                  dot
+                  width={96}
+                  title="Leaves — the plate goes living"
+                >
+                  leaves
+                </DrawerAction>
+                <DrawerAction onClick={growAgain} width={118}>
+                  grow again
+                </DrawerAction>
+                <DrawerAction onClick={downloadPlate} width={118} last title="Press this plate into a PNG">
+                  download
+                </DrawerAction>
               </>
             )}
 
@@ -1028,7 +1205,7 @@ export default function HortusGrammaticus() {
                   label="Divergence"
                   value={`${divergence.toFixed(3)}°`}
                   valueColor={nearGolden ? C.gold : C.ink}
-                  width={212}
+                  width={190}
                 >
                   <input
                     type="range"
@@ -1040,26 +1217,16 @@ export default function HortusGrammaticus() {
                     style={{ ...sliderStyle, accentColor: nearGolden ? C.gold : C.ink }}
                     aria-label="Divergence angle between successive florets"
                   />
-                  <div className="flex items-center justify-between" style={{ gap: 6 }}>
-                    <span style={{ fontSize: 10, color: nearGolden ? C.gold : C.dim, whiteSpace: "nowrap" }}>
-                      {nearGolden
-                        ? "in tune with φ"
-                        : `${deltaPhi > 0 ? "+" : ""}${deltaPhi.toFixed(3)}° from φ`}
-                    </span>
-                    <button
+                </DrawerCard>
+                <DrawerCard label="Snap" width={78}>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <SnapChip
+                      on={nearGolden}
                       onClick={() => setDivergence(GOLDEN)}
-                      className="px-2 rounded-full"
-                      style={{
-                        border: `1px solid ${C.gold}`,
-                        color: nearGolden ? C.page : C.gold,
-                        background: nearGolden ? C.gold : "transparent",
-                        fontSize: 11,
-                        lineHeight: "18px",
-                      }}
                       title="Snap to the golden angle, 137.508°"
                     >
                       φ
-                    </button>
+                    </SnapChip>
                   </div>
                 </DrawerCard>
                 <DrawerCard label="Florets" value={count} width={150}>
@@ -1086,20 +1253,20 @@ export default function HortusGrammaticus() {
                     aria-label="Floret size"
                   />
                 </DrawerCard>
-                <DrawerCard width={130} last>
-                  <button
-                    onClick={() => {
-                      animateNext.current = true;
-                      setCount((c) => c);
-                      setSeed((s) => s + 1);
-                      setDivergence((d) => d + 0.0000001);
-                    }}
-                    className="w-full py-2 text-sm rounded-sm"
-                    style={{ border: `1px solid ${C.ink}`, color: C.ink, background: "transparent" }}
-                  >
-                    Bloom again
-                  </button>
-                </DrawerCard>
+                <DrawerAction
+                  onClick={() => {
+                    animateNext.current = true;
+                    setCount((c) => c);
+                    setSeed((s) => s + 1);
+                    setDivergence((d) => d + 0.0000001);
+                  }}
+                  width={128}
+                >
+                  bloom again
+                </DrawerAction>
+                <DrawerAction onClick={downloadPlate} width={118} last title="Press this plate into a PNG">
+                  download
+                </DrawerAction>
               </>
             )}
           </div>
@@ -1126,40 +1293,30 @@ export default function HortusGrammaticus() {
                   fontFamily: "'Cormorant Garamond', Georgia, serif",
                   fontStyle: "italic",
                   fontSize: "1.2rem",
-                  color: C.onFaded,
+                  color: leafy ? C.faded : C.onFaded,
                   lineHeight: 1.5,
                 }}
               >
-                Nothing sown yet. Ink a few edges in the seed bed below — the lowest stroke
-                becomes the root, and the grammar writes itself.
+                Nothing sown yet — ink a few edges in the seed bed below.
               </div>
             )}
 
-            {/* plate number */}
-            <div className="absolute top-3 right-4 text-xs" style={{ color: C.onDim, letterSpacing: "0.2em" }}>
-              PLATE {plateNo}
-            </div>
-
-            {/* specimen label — sits straight on the plate now, no scrim */}
-            <div className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-end justify-between gap-3">
-              <div>
-                <div
-                  style={{
-                    fontFamily: "'Cormorant Garamond', Georgia, serif",
-                    fontStyle: "italic",
-                    fontSize: "1.35rem",
-                    lineHeight: 1.1,
-                    color: C.onInk,
-                  }}
-                >
-                  {label.latin}
-                </div>
-                <div className="text-xs mt-0.5" style={{ color: C.onFaded }}>
-                  {label.common}
-                </div>
+            {/* specimen label — small, up in the corner where the plate
+                number used to live, out of the tree's way */}
+            <div className="absolute top-3 right-4 text-right pointer-events-none">
+              <div
+                style={{
+                  fontFamily: "'Cormorant Garamond', Georgia, serif",
+                  fontStyle: "italic",
+                  fontSize: "1.05rem",
+                  lineHeight: 1.1,
+                  color: leafy ? C.ink : C.onInk,
+                }}
+              >
+                {label.latin}
               </div>
-              <div className="text-right text-xs hidden sm:block" style={{ color: C.onDim, maxWidth: "24ch" }}>
-                {label.note}
+              <div className="text-xs mt-0.5" style={{ color: leafy ? C.faded : C.onFaded }}>
+                {label.common}
               </div>
             </div>
           </div>
@@ -1170,33 +1327,20 @@ export default function HortusGrammaticus() {
             </p>
           )}
 
-          {mode === "p" && (
-            <p className="mt-3 text-xs leading-relaxed" style={{ color: C.dim, maxWidth: "52ch" }}>
-              Try 137.3°, then 137.6°, then let φ tune it. A twentieth of a degree is the whole
-              difference between spokes and a sunflower.
-            </p>
-          )}
-
           {/* ——— the seed bed, just below the tree (hand mode) ——— */}
           {mode === "d" && (
             <div style={{ maxWidth: 460, margin: "22px auto 0" }}>
-              <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em" }}>
+              <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em", marginBottom: 8 }}>
                 Seminarium — the seed bed
               </div>
-              <p className="mt-1.5 mb-3 text-xs leading-relaxed" style={{ color: C.dim }}>
-                Ink the graph paper: this is generation one, drawn by hand. Tap or drag along an
-                edge; tap again to erase — the tree above grows as you go.
-              </p>
 
-              <SeedTray strokes={strokes} setStrokes={setStrokes} drawn={drawn} />
+              <SeedTray strokes={strokes} setStrokes={setStrokes} buds={buds} setBuds={setBuds} drawn={drawn} />
 
               {drawn.rule && (
                 <p className="mt-2 text-xs leading-relaxed" style={{ color: C.dim }}>
-                  <span style={{ color: C.gold }}>●</span> radix — the lowest inked point; the
-                  plant reads upward from it.
-                  {drawn.loose > 0 && (
-                    <> Pale strokes aren't joined to the root, so they stay out of the grammar.</>
-                  )}
+                  <span style={{ color: C.gold }}>●</span> radix ·{" "}
+                  <span style={{ color: C.gold }}>○</span> gemma — tap a crossing
+                  {drawn.loose > 0 && <> · pale strokes aren't joined to the root</>}
                 </p>
               )}
 
@@ -1215,26 +1359,32 @@ export default function HortusGrammaticus() {
                   }}
                 >
                   <div>
-                    <span style={{ color: C.onDim }}>axiom&nbsp;&nbsp;</span>F
+                    <span style={{ color: C.onDim }}>axiom&nbsp;&nbsp;</span>
+                    {drawn.hasBuds ? "X" : "F"}
                   </div>
                   <div style={{ wordBreak: "break-all" }}>
-                    <span style={{ color: C.onDim }}>F → </span>
+                    <span style={{ color: C.onDim }}>{drawn.hasBuds ? "X → " : "F → "}</span>
                     {drawn.rule || <span style={{ color: C.onDim }}>…</span>}
                   </div>
+                  {drawn.hasBuds && (
+                    <div>
+                      <span style={{ color: C.onDim }}>F → </span>FF
+                    </div>
+                  )}
                 </div>
-                <p className="mt-1.5 text-xs leading-relaxed" style={{ color: C.dim }}>
-                  Each generation rewrites every stroke as the whole gesture.
-                </p>
                 <div className="mt-2 flex gap-2">
                   <button
-                    onClick={() => setStrokes(new Set())}
-                    disabled={strokes.size === 0}
+                    onClick={() => {
+                      setStrokes(new Set());
+                      setBuds(new Set());
+                    }}
+                    disabled={strokes.size === 0 && buds.size === 0}
                     className="flex-1 py-1.5 text-xs rounded-sm"
                     style={{
                       border: `1px solid ${C.plateGlow}`,
-                      color: strokes.size ? C.faded : C.dim,
+                      color: strokes.size || buds.size ? C.faded : C.dim,
                       background: "transparent",
-                      opacity: strokes.size ? 1 : 0.5,
+                      opacity: strokes.size || buds.size ? 1 : 0.5,
                     }}
                   >
                     Clear the tray
