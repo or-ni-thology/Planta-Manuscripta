@@ -776,6 +776,23 @@ export default function HortusGrammaticus() {
     setSeed((s) => (s * 16807 + 13) % 2147483647);
   }
 
+  // a filename stamped with the specimen and the moment it was pressed,
+  // shared by both the PNG and the SVG so a plate keeps its name whichever
+  // way it travels.
+  function plateFilename(ext) {
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    const name = label.latin.toLowerCase().replace(/[^a-z]+/g, "-");
+    return `${name}-${stamp}.${ext}`;
+  }
+
+  function saveBlob(blob, filename) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   // press the current plate into a PNG — an arboretum for the phone.
   // (In leaf mode the plate is transparent, so the tree travels bare.)
   function downloadPlate() {
@@ -783,14 +800,125 @@ export default function HortusGrammaticus() {
     if (!canvas) return;
     canvas.toBlob((blob) => {
       if (!blob) return;
-      const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
-      const name = label.latin.toLowerCase().replace(/[^a-z]+/g, "-");
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${name}-${stamp}.png`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      saveBlob(blob, plateFilename("png"));
     });
+  }
+
+  // press the plate into an SVG instead — the same specimen, but as vector
+  // line and leaf, so it scales to any header without going soft. We don't
+  // read the canvas back (a canvas has no lines left, only pixels); we replay
+  // the very geometry the canvas drew — the same segments, leaves and florets,
+  // the same scale, offset, widths and alphas — as SVG shapes. Static: the
+  // finished plate, not the animation.
+  function buildSVG() {
+    const { w, h } = dims;
+    const pad = 34;
+    const f = (v) => Math.round(v * 100) / 100; // trim coordinates so the file stays light
+    const parts = [];
+
+    if (leafy) {
+      // a transparent plate — the tree sits straight on the page
+      parts.push(`<rect width="${w}" height="${h}" fill="none"/>`);
+    } else {
+      // the cyanotype plate wash — the same radial gradient the canvas paints
+      const cx = w / 2;
+      const cy = h / 2;
+      const r0 = Math.min(w, h) * 0.1;
+      const r1 = Math.max(w, h) * 0.75;
+      parts.push(
+        `<defs><radialGradient id="wash" gradientUnits="userSpaceOnUse" cx="${f(cx)}" cy="${f(cy)}" r="${f(r1)}" fx="${f(cx)}" fy="${f(cy)}" fr="${f(r0)}">` +
+          `<stop offset="0" stop-color="${C.plateGlow}"/><stop offset="1" stop-color="${C.plate}"/>` +
+          `</radialGradient></defs>`,
+        `<rect width="${w}" height="${h}" fill="url(#wash)"/>`
+      );
+    }
+
+    if (mode !== "p" && grown) {
+      const { segs, tips, bbox } = grown;
+      const [minX, minY, maxX, maxY] = bbox;
+      const bw = Math.max(1, maxX - minX);
+      const bh = Math.max(1, maxY - minY);
+      const scale = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
+      const ox = (w - bw * scale) / 2 - minX * scale;
+      const oy = (h - bh * scale) / 2 - minY * scale;
+      const n = segs.length / 5;
+      const stroke = leafy ? C.branch : C.line;
+
+      let lines = "";
+      for (let i = 0; i < n; i++) {
+        const j = i * 5;
+        const d = segs[j + 4];
+        const alpha = Math.max(0.35, 0.95 - d * 0.055);
+        const lw = Math.max(0.55, 2.4 - d * 0.3);
+        const x1 = f(segs[j] * scale + ox);
+        const y1 = f(segs[j + 1] * scale + oy);
+        const x2 = f(segs[j + 2] * scale + ox);
+        const y2 = f(segs[j + 3] * scale + oy);
+        lines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke-width="${f(lw)}" stroke-opacity="${f(alpha)}"/>`;
+      }
+      parts.push(
+        `<g stroke="${stroke}" stroke-linecap="round" fill="none">${lines}</g>`
+      );
+
+      // the little translucent leaves, if the plate is in leaf — the same
+      // almond quadratics, only above the leaf line.
+      if (leaves && tips.length) {
+        const len = Math.min(18 * scale, 28);
+        const wid = Math.min(6 * scale, 9);
+        const yCut = minY + (maxY - minY) * 0.7 + 0.001;
+        const lw = Math.max(0.4, Math.min(1, scale * 1.6));
+        let leafPaths = "";
+        for (let k = 0; k < tips.length; k += 3) {
+          if (tips[k + 1] > yCut) continue;
+          const bx = tips[k] * scale + ox;
+          const by = tips[k + 1] * scale + oy;
+          const ang = tips[k + 2];
+          const tx = bx + len * Math.cos(ang);
+          const ty = by + len * Math.sin(ang);
+          const mx = bx + len * 0.5 * Math.cos(ang);
+          const my = by + len * 0.5 * Math.sin(ang);
+          const px = Math.cos(ang + Math.PI / 2);
+          const py = Math.sin(ang + Math.PI / 2);
+          leafPaths +=
+            `<path d="M${f(bx)},${f(by)} Q${f(mx + px * wid)},${f(my + py * wid)} ${f(tx)},${f(ty)} ` +
+            `Q${f(mx - px * wid)},${f(my - py * wid)} ${f(bx)},${f(by)} Z"/>`;
+        }
+        parts.push(
+          `<g fill="${C.leafFill}" stroke="${C.leafStroke}" stroke-linecap="round" stroke-width="${f(lw)}">${leafPaths}</g>`
+        );
+      }
+    }
+
+    if (mode === "p") {
+      const N = count;
+      const maxR = Math.min(w, h) / 2 - pad;
+      const c = maxR / Math.sqrt(N);
+      const cx = w / 2;
+      const cy = h / 2;
+      const dRad = (divergence * Math.PI) / 180;
+      const golden = Math.abs(divergence - GOLDEN) < 0.02;
+      let dots = "";
+      for (let i = 1; i <= N; i++) {
+        const r = c * Math.sqrt(i);
+        const th = i * dRad;
+        const dr = floretSize * (0.3 + 0.7 * Math.sqrt(i / N));
+        const fill = golden
+          ? `rgba(226,205,160,${f(0.55 + 0.4 * (i / N))})`
+          : `rgba(234,243,246,${f(0.5 + 0.42 * (i / N))})`;
+        dots += `<circle cx="${f(cx + r * Math.cos(th))}" cy="${f(cy + r * Math.sin(th))}" r="${f(dr)}" fill="${fill}"/>`;
+      }
+      parts.push(dots);
+    }
+
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" ` +
+      `viewBox="0 0 ${w} ${h}">${parts.join("")}</svg>`
+    );
+  }
+
+  function downloadSVG() {
+    const blob = new Blob([buildSVG()], { type: "image/svg+xml;charset=utf-8" });
+    saveBlob(blob, plateFilename("svg"));
   }
 
   function applyGrammar() {
@@ -830,6 +958,31 @@ export default function HortusGrammaticus() {
     });
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  // The incantation against the double scrollbar. When the herbarium lives
+  // inside a WordPress iframe, the parent page can't know how tall the toy has
+  // grown — so it guesses a height, the toy overflows it, and you get an inner
+  // scrollbar riding alongside the page's own. Here the toy simply tells its
+  // parent how tall it is, on every change, via postMessage. The one-line
+  // listener on the WordPress side (see README) sizes the iframe to fit, and
+  // the inner bar never appears. Harmless when not framed — no parent listens.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.parent === window) return;
+    const post = () => {
+      const height = Math.ceil(
+        document.documentElement.getBoundingClientRect().height
+      );
+      window.parent.postMessage({ type: "planta:height", height }, "*");
+    };
+    post();
+    const ro = new ResizeObserver(post);
+    ro.observe(document.documentElement);
+    window.addEventListener("load", post);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("load", post);
+    };
   }, []);
 
   // grow the grammar
@@ -1192,8 +1345,11 @@ export default function HortusGrammaticus() {
                 <DrawerAction onClick={growAgain} width={118}>
                   grow again
                 </DrawerAction>
-                <DrawerAction onClick={downloadPlate} width={118} last title="Press this plate into a PNG">
-                  download
+                <DrawerAction onClick={downloadPlate} width={110} title="Press this plate into a PNG">
+                  png
+                </DrawerAction>
+                <DrawerAction onClick={downloadSVG} width={110} last title="Press this plate into an SVG — vector line and leaf, for headers">
+                  svg
                 </DrawerAction>
               </>
             )}
@@ -1264,8 +1420,11 @@ export default function HortusGrammaticus() {
                 >
                   bloom again
                 </DrawerAction>
-                <DrawerAction onClick={downloadPlate} width={118} last title="Press this plate into a PNG">
-                  download
+                <DrawerAction onClick={downloadPlate} width={110} title="Press this plate into a PNG">
+                  png
+                </DrawerAction>
+                <DrawerAction onClick={downloadSVG} width={110} last title="Press this plate into an SVG — vector floret, for headers">
+                  svg
                 </DrawerAction>
               </>
             )}
