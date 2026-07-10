@@ -11,6 +11,9 @@ import { useState, useRef, useEffect, useMemo } from "react";
 // ————————————————————————————————————————————————
 
 const GOLDEN = 137.50776405003785;
+// The golden angle for a BRANCH, measured from the underside — the stem keeps
+// going and the branch opens 180° − 137.508° away from it. Golden-angle ferns.
+const PHI_BRANCH = 180 - GOLDEN;
 const MAX_LEN = 260000; // cap on expanded grammar string
 const MAX_SEGS = 90000; // cap on drawn segments
 
@@ -222,6 +225,14 @@ function turtleSegments(s, angleDeg, wildness, seed) {
 // node is the root; a depth-first walk over the strokes
 // transcribes it into turtle speech, bracketing every
 // side-branch so the pen always finds its way home.
+//
+// GEMMAE — buds. Tap a lattice crossing to plant one.
+// A bud becomes a silent X in the grammar: the walk speaks
+// "[X]" when it passes, and the rules become fern-shaped —
+//   X → the gesture (with X's at the buds)
+//   F → FF (old wood stretches)
+// so the whole pattern regrows at every bud, each
+// generation, pointing the way the walk was going.
 // ————————————————————————————————————————————————
 
 const TRAY_N = 10; // cells per side
@@ -237,8 +248,17 @@ function edgeEnds(key) {
     : [x, y, x, y + 1];
 }
 
-function deriveGrammar(strokes) {
-  const empty = { rule: "", rooted: new Set(), root: null, edgeCount: 0, loose: 0, dynMax: 8 };
+function deriveGrammar(strokes, buds) {
+  const empty = {
+    rule: "",
+    rooted: new Set(),
+    root: null,
+    edgeCount: 0,
+    loose: 0,
+    dynMax: 8,
+    hasBuds: false,
+    buddedNodes: new Set(),
+  };
   if (!strokes || strokes.size === 0) return empty;
 
   // adjacency: "x,y" → [{to, dir, key}] · dirs: 0 right, 1 down, 2 left, 3 up
@@ -311,6 +331,15 @@ function deriveGrammar(strokes) {
   // stroke is spoken exactly once; brackets bring the pen home)
   const visited = new Set();
   const out = [];
+  // a bud speaks once, the first time the walk reaches its crossing —
+  // bracketed, so the regrown pattern is a side-shoot and the pen carries on
+  const buddedNodes = new Set();
+  const maybeBud = (node) => {
+    if (buds && buds.has(node) && !buddedNodes.has(node)) {
+      buddedNodes.add(node);
+      out.push("[X]");
+    }
+  };
   const TURN = ["", "-", "++", "+"]; // by (dir − heading) mod 4
   const PRIO = { 3: 0, 2: 1, 1: 2, 0: 3 }; // branch left & right first, run straight last
   const walk = (node, heading) => {
@@ -327,18 +356,41 @@ function deriveGrammar(strokes) {
         out.push(t + "F");
         node = e.to;
         heading = e.dir;
+        maybeBud(node);
       } else {
         out.push("[" + t + "F");
+        maybeBud(e.to);
         walk(e.to, e.dir);
         out.push("]");
       }
     }
   };
+  maybeBud(root); // a bud on the root itself is welcome
   walk(root, 3); // the pen begins at the root, facing up
 
   const edgeCount = best.edgeKeys.size;
-  const E = Math.max(2, edgeCount);
-  const dynMax = Math.max(2, Math.min(8, Math.floor(Math.log(120000) / Math.log(E))));
+  const hasBuds = buddedNodes.size > 0;
+  let dynMax;
+  if (hasBuds) {
+    // fern arithmetic: F(n+1) = 2F(n) + E·X(n), X(n+1) = B·X(n) — walk the
+    // recurrence until the wood outgrows the pot, that's the slider's ceiling
+    const E = edgeCount;
+    const B = buddedNodes.size;
+    let f = 0,
+      x = 1,
+      n = 0;
+    while (n < 8) {
+      const nf = 2 * f + E * x;
+      if (nf > 120000) break;
+      f = nf;
+      x = B * x;
+      n++;
+    }
+    dynMax = Math.max(2, n);
+  } else {
+    const E = Math.max(2, edgeCount);
+    dynMax = Math.max(2, Math.min(8, Math.floor(Math.log(120000) / Math.log(E))));
+  }
   return {
     rule: out.join(""),
     rooted: best.edgeKeys,
@@ -346,14 +398,17 @@ function deriveGrammar(strokes) {
     edgeCount,
     loose: strokes.size - edgeCount,
     dynMax,
+    hasBuds,
+    buddedNodes,
   };
 }
 
-// the drawable graph paper
-function SeedTray({ strokes, setStrokes, drawn }) {
+// the drawable graph paper. Edges are inked by tap or drag; the crossings
+// themselves take a tap to plant (or lift) a gemma — a bud.
+function SeedTray({ strokes, setStrokes, buds, setBuds, drawn }) {
   const svgRef = useRef(null);
   const drag = useRef({ active: false, mode: null });
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useState(null); // an edge key, or "N:x,y" for a crossing
 
   const toGrid = (e) => {
     const r = svgRef.current.getBoundingClientRect();
@@ -387,6 +442,15 @@ function SeedTray({ strokes, setStrokes, drawn }) {
     return (h ?? v)?.key ?? null;
   };
 
+  // nearest lattice crossing — the dead zones pick() leaves around the
+  // corners are exactly where a bud tap lands
+  const pickNode = (gx, gy) => {
+    const nx = Math.round(gx),
+      ny = Math.round(gy);
+    if (nx < 0 || nx > TRAY_N || ny < 0 || ny > TRAY_N) return null;
+    return Math.hypot(gx - nx, gy - ny) < 0.28 ? `${nx},${ny}` : null;
+  };
+
   const setEdge = (key, on) => {
     setStrokes((prev) => {
       if (prev.has(key) === on) return prev;
@@ -402,6 +466,21 @@ function SeedTray({ strokes, setStrokes, drawn }) {
     svgRef.current.setPointerCapture?.(e.pointerId);
     const [gx, gy] = toGrid(e);
     const key = pick(gx, gy);
+    if (!key) {
+      // no edge under the finger — a crossing means a bud, in or out
+      const node = pickNode(gx, gy);
+      if (node) {
+        setBuds((prev) => {
+          const next = new Set(prev);
+          if (next.has(node)) next.delete(node);
+          else next.add(node);
+          return next;
+        });
+        drag.current.active = false;
+        drag.current.mode = null;
+        return;
+      }
+    }
     drag.current.active = true;
     drag.current.mode = key ? !strokes.has(key) : null;
     if (key) setEdge(key, drag.current.mode);
@@ -410,7 +489,8 @@ function SeedTray({ strokes, setStrokes, drawn }) {
     const [gx, gy] = toGrid(e);
     const key = pick(gx, gy);
     if (!drag.current.active) {
-      setHover(key);
+      const node = key ? null : pickNode(gx, gy);
+      setHover(key ?? (node ? `N:${node}` : null));
       return;
     }
     if (!key) return;
@@ -445,7 +525,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
         background: C.plate,
       }}
       role="application"
-      aria-label="Seed bed — a drawable grid. Ink edges to compose the first generation."
+      aria-label="Seed bed — a drawable grid. Ink edges to compose the first generation; tap a crossing to plant a bud."
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
@@ -453,7 +533,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
       onPointerLeave={() => setHover(null)}
     >
       {gridLines}
-      {hover && !strokes.has(hover) && (
+      {hover && hover[0] !== "N" && !strokes.has(hover) && (
         <line
           {...(() => {
             const [x1, y1, x2, y2] = edgeEnds(hover);
@@ -462,6 +542,19 @@ function SeedTray({ strokes, setStrokes, drawn }) {
           stroke={C.goldPlate}
           strokeWidth="4"
           strokeLinecap="round"
+          opacity="0.35"
+        />
+      )}
+      {hover && hover[0] === "N" && (
+        <circle
+          {...(() => {
+            const [x, y] = hover.slice(2).split(",").map(Number);
+            return { cx: px(x), cy: px(y) };
+          })()}
+          r="6"
+          fill="none"
+          stroke={C.goldPlate}
+          strokeWidth="1.5"
           opacity="0.35"
         />
       )}
@@ -479,6 +572,23 @@ function SeedTray({ strokes, setStrokes, drawn }) {
             strokeWidth={rooted ? 3.5 : 2.5}
             strokeLinecap="round"
             opacity={rooted ? (hover === key ? 0.7 : 0.95) : 0.3}
+          />
+        );
+      })}
+      {/* gemmae — hollow gold rings; pale when not joined to the plant */}
+      {[...buds].map((node) => {
+        const [x, y] = node.split(",").map(Number);
+        const rooted = drawn.buddedNodes.has(node);
+        return (
+          <circle
+            key={`b${node}`}
+            cx={px(x)}
+            cy={px(y)}
+            r="4.5"
+            fill={C.plate}
+            stroke={C.goldPlate}
+            strokeWidth="1.5"
+            opacity={rooted ? 0.95 : 0.35}
           />
         );
       })}
@@ -613,8 +723,10 @@ export default function HortusGrammaticus() {
   const [draftRules, setDraftRules] = useState(FERN.rules);
   const [showGrammar, setShowGrammar] = useState(false);
 
-  // hand-drawn strokes on the seed bed (survive changes of specimen)
+  // hand-drawn strokes on the seed bed (survive changes of specimen),
+  // and the gemmae — budded crossings where the pattern regrows
   const [strokes, setStrokes] = useState(() => new Set());
+  const [buds, setBuds] = useState(() => new Set());
 
   // phyllotaxis state
   const [divergence, setDivergence] = useState(GOLDEN);
@@ -691,16 +803,17 @@ export default function HortusGrammaticus() {
   }
 
   // the seed bed's transcription
-  const drawn = useMemo(() => deriveGrammar(strokes), [strokes]);
+  const drawn = useMemo(() => deriveGrammar(strokes, buds), [strokes, buds]);
 
   // carry the hand-written rule into the text editor for refinement
   function refineAsText() {
-    const r = `F → ${drawn.rule}`;
+    const ax = drawn.hasBuds ? "X" : "F";
+    const r = drawn.hasBuds ? `X → ${drawn.rule}\nF → FF` : `F → ${drawn.rule}`;
     setMode("l");
     setCustom(true);
-    setAxiom("F");
+    setAxiom(ax);
     setRulesText(r);
-    setDraftAxiom("F");
+    setDraftAxiom(ax);
     setDraftRules(r);
     setMaxIter(8);
     setShowGrammar(true);
@@ -725,8 +838,14 @@ export default function HortusGrammaticus() {
     let ax, rules, iters;
     if (mode === "d") {
       if (!drawn.rule) return null;
-      ax = "F";
-      rules = { F: drawn.rule };
+      if (drawn.hasBuds) {
+        // fern-shaped: the gesture regrows at every bud, the wood stretches
+        ax = "X";
+        rules = { X: drawn.rule, F: "FF" };
+      } else {
+        ax = "F";
+        rules = { F: drawn.rule };
+      }
       iters = Math.min(iterations, drawn.dynMax);
     } else {
       ax = axiom;
@@ -898,7 +1017,7 @@ export default function HortusGrammaticus() {
 
   const nearGolden = Math.abs(divergence - GOLDEN) < 0.02;
   const onSquare = Math.abs(angle - 90) < 0.25;
-  const onPhiAngle = Math.abs(angle - GOLDEN) < 0.02;
+  const onPhiAngle = Math.abs(angle - PHI_BRANCH) < 0.02;
   const angleDisp = Math.round(angle * 10) / 10;
 
   const genMax = mode === "d" ? drawn.dynMax : maxIter;
@@ -1042,8 +1161,8 @@ export default function HortusGrammaticus() {
                     </SnapChip>
                     <SnapChip
                       on={onPhiAngle}
-                      onClick={() => setAngle(GOLDEN)}
-                      title="Snap to the golden angle, 137.508°"
+                      onClick={() => setAngle(PHI_BRANCH)}
+                      title="Snap to the golden angle, measured from the underside of the branch — 42.492°"
                     >
                       φ
                     </SnapChip>
@@ -1215,11 +1334,12 @@ export default function HortusGrammaticus() {
                 Seminarium — the seed bed
               </div>
 
-              <SeedTray strokes={strokes} setStrokes={setStrokes} drawn={drawn} />
+              <SeedTray strokes={strokes} setStrokes={setStrokes} buds={buds} setBuds={setBuds} drawn={drawn} />
 
               {drawn.rule && (
                 <p className="mt-2 text-xs leading-relaxed" style={{ color: C.dim }}>
-                  <span style={{ color: C.gold }}>●</span> radix
+                  <span style={{ color: C.gold }}>●</span> radix ·{" "}
+                  <span style={{ color: C.gold }}>○</span> gemma — tap a crossing
                   {drawn.loose > 0 && <> · pale strokes aren't joined to the root</>}
                 </p>
               )}
@@ -1239,23 +1359,32 @@ export default function HortusGrammaticus() {
                   }}
                 >
                   <div>
-                    <span style={{ color: C.onDim }}>axiom&nbsp;&nbsp;</span>F
+                    <span style={{ color: C.onDim }}>axiom&nbsp;&nbsp;</span>
+                    {drawn.hasBuds ? "X" : "F"}
                   </div>
                   <div style={{ wordBreak: "break-all" }}>
-                    <span style={{ color: C.onDim }}>F → </span>
+                    <span style={{ color: C.onDim }}>{drawn.hasBuds ? "X → " : "F → "}</span>
                     {drawn.rule || <span style={{ color: C.onDim }}>…</span>}
                   </div>
+                  {drawn.hasBuds && (
+                    <div>
+                      <span style={{ color: C.onDim }}>F → </span>FF
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 flex gap-2">
                   <button
-                    onClick={() => setStrokes(new Set())}
-                    disabled={strokes.size === 0}
+                    onClick={() => {
+                      setStrokes(new Set());
+                      setBuds(new Set());
+                    }}
+                    disabled={strokes.size === 0 && buds.size === 0}
                     className="flex-1 py-1.5 text-xs rounded-sm"
                     style={{
                       border: `1px solid ${C.plateGlow}`,
-                      color: strokes.size ? C.faded : C.dim,
+                      color: strokes.size || buds.size ? C.faded : C.dim,
                       background: "transparent",
-                      opacity: strokes.size ? 1 : 0.5,
+                      opacity: strokes.size || buds.size ? 1 : 0.5,
                     }}
                   >
                     Clear the tray
