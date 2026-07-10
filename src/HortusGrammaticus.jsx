@@ -15,14 +15,30 @@ const MAX_LEN = 260000; // cap on expanded grammar string
 const MAX_SEGS = 90000; // cap on drawn segments
 
 const C = {
-  page: "#0b1c2c",
+  // The light page — the vague blue-grey of the Northumberland sky, the same
+  // easy-to-look-at ground as or-ni-thology.cloud. The dark is lifted off.
+  page: "#e6eaec",
+  // A hair lighter than the sky — the drawer's own ground, so the potting
+  // bench reads as a raised instrument on the page (flat, no shadow).
+  panel: "#eef1f3",
+  // The plates stay Prussian blue: the cyanotype soul is kept.
   plate: "#12314f",
   plateGlow: "#1b4266",
-  ink: "#eaf3f6",
-  faded: "#93b0bf",
-  dim: "#5f7d8e",
-  gold: "#d3ab6b",
-  line: "rgba(234,243,246,0.88)",
+  // Ink ON THE LIGHT PAGE — dark blue on light, so the eyes stay sensible.
+  // (It's the plate's own blue, so the text and the plates rhyme.)
+  ink: "#12314f",
+  faded: "#3f5a6b",
+  dim: "#586f7d",
+  // The gold accent, darkened so it reads on the light page.
+  gold: "#9c6b1f",
+  // Ink ON THE PLATES stays light — white specimens pressed on Prussian blue.
+  onInk: "#eaf3f6",
+  onFaded: "#a9c1cd",
+  onDim: "#8ba4b3",
+  // The plate's own light gold — the seed-bed root and its hover glow.
+  goldPlate: "#d3ab6b",
+  // Specimen lines, drawn light on the plate.
+  line: "rgba(234,243,246,0.9)",
 };
 
 const PRESETS = [
@@ -146,6 +162,12 @@ function turtleSegments(s, angleDeg, wildness, seed) {
     minY = 0,
     maxY = 0;
   const step = 10;
+  // branch tips — where leaves belong. A tip is the end of a branch that
+  // actually drew something: we mark one whenever a branch closes (`]`) or the
+  // string ends while the pen has drawn since the last fork. Stored as
+  // [x, y, heading] triples so a leaf can point the way the twig was going.
+  const tips = [];
+  let justDrew = false;
   for (const ch of s) {
     if (ch === "F" || ch === "G") {
       if (wildness > 0) a += (rand() - 0.5) * wildness * 0.045;
@@ -154,6 +176,7 @@ function turtleSegments(s, angleDeg, wildness, seed) {
       segs.push(x, y, nx, ny, depth);
       x = nx;
       y = ny;
+      justDrew = true;
       if (nx < minX) minX = nx;
       if (nx > maxX) maxX = nx;
       if (ny < minY) minY = ny;
@@ -164,16 +187,20 @@ function turtleSegments(s, angleDeg, wildness, seed) {
     else if (ch === "[") {
       stack.push(x, y, a, depth);
       depth = Math.min(depth + 1, 12);
+      justDrew = false; // a fresh branch hasn't drawn yet
     } else if (ch === "]") {
+      if (justDrew) tips.push(x, y, a); // the branch we're closing ended here
       if (stack.length >= 4) {
         depth = stack.pop();
         a = stack.pop();
         y = stack.pop();
         x = stack.pop();
       }
+      justDrew = false;
     }
   }
-  return { segs, bbox: [minX, minY, maxX, maxY] };
+  if (justDrew) tips.push(x, y, a); // an unbracketed trunk ends in a tip too
+  return { segs, tips, bbox: [minX, minY, maxX, maxY] };
 }
 
 // ————————————————————————————————————————————————
@@ -422,7 +449,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
             const [x1, y1, x2, y2] = edgeEnds(hover);
             return { x1: px(x1), y1: px(y1), x2: px(x2), y2: px(y2) };
           })()}
-          stroke={C.gold}
+          stroke={C.goldPlate}
           strokeWidth="4"
           strokeLinecap="round"
           opacity="0.35"
@@ -438,7 +465,7 @@ function SeedTray({ strokes, setStrokes, drawn }) {
             y1={px(y1)}
             x2={px(x2)}
             y2={px(y2)}
-            stroke={C.ink}
+            stroke={C.onInk}
             strokeWidth={rooted ? 3.5 : 2.5}
             strokeLinecap="round"
             opacity={rooted ? (hover === key ? 0.7 : 0.95) : 0.3}
@@ -447,8 +474,8 @@ function SeedTray({ strokes, setStrokes, drawn }) {
       })}
       {drawn.root && (
         <>
-          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="7" fill="none" stroke={C.gold} strokeWidth="1" opacity="0.5" />
-          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="3.5" fill={C.gold} />
+          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="7" fill="none" stroke={C.goldPlate} strokeWidth="1" opacity="0.5" />
+          <circle cx={px(drawn.root[0])} cy={px(drawn.root[1])} r="3.5" fill={C.goldPlate} />
         </>
       )}
     </svg>
@@ -456,21 +483,59 @@ function SeedTray({ strokes, setStrokes, drawn }) {
 }
 
 // ————————————————————————————————————————————————
+// One card of the potting-bench drawer — a fixed-width cell divided from its
+// neighbour by a blue rule, a small mono caption + value up top, the control
+// below. The drawer scrolls sideways when the cards outrun the phone, exactly
+// as Mooring's tool drawer does.
+function DrawerCard({ label, value, valueColor, width = 152, last = false, children }) {
+  return (
+    <div
+      style={{
+        flex: "0 0 auto",
+        width,
+        borderRight: last ? "none" : `1px solid ${C.plateGlow}`,
+        padding: "11px 14px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        gap: 7,
+      }}
+    >
+      {(label || value != null) && (
+        <div className="flex justify-between items-baseline" style={{ fontSize: 11 }}>
+          {label && (
+            <span style={{ color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              {label}
+            </span>
+          )}
+          {value != null && <span style={{ color: valueColor || C.ink }}>{value}</span>}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+// ————————————————————————————————————————————————
 
 export default function HortusGrammaticus() {
-  const [presetId, setPresetId] = useState("fern");
+  // Open on the hand-drawn plant (Planta manuscripta) — the thing Alison plays
+  // with. The seed bed is the front door.
+  const [presetId, setPresetId] = useState("hand");
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
 
-  // L-system state
+  // L-system state. (axiom/rules keep the fern's defaults so the grammar editor
+  // has something to show if you switch to a preset; unused while hand-drawing.)
   const [axiom, setAxiom] = useState(PRESETS[0].axiom);
   const [rulesText, setRulesText] = useState(PRESETS[0].rules);
-  const [iterations, setIterations] = useState(PRESETS[0].iterations);
+  const [iterations, setIterations] = useState(1); // begin with the drawing itself
   const [maxIter, setMaxIter] = useState(PRESETS[0].maxIter);
-  const [angle, setAngle] = useState(PRESETS[0].angle);
-  const [wildness, setWildness] = useState(PRESETS[0].wildness);
+  const [angle, setAngle] = useState(90); // true to the graph paper
+  const [wildness, setWildness] = useState(0);
   const [seed, setSeed] = useState(7);
+  const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
   const [custom, setCustom] = useState(false);
-  const [mode, setMode] = useState("l"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
+  const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
 
   // draft grammar (edited but not yet grown)
   const [draftAxiom, setDraftAxiom] = useState(PRESETS[0].axiom);
@@ -615,7 +680,7 @@ export default function HortusGrammaticus() {
     const pad = 34;
 
     if (mode !== "p" && grown) {
-      const { segs, bbox } = grown;
+      const { segs, tips, bbox } = grown;
       const [minX, minY, maxX, maxY] = bbox;
       const bw = Math.max(1, maxX - minX);
       const bh = Math.max(1, maxY - minY);
@@ -640,8 +705,43 @@ export default function HortusGrammaticus() {
         ctx.globalAlpha = 1;
       };
 
+      // little translucent leaves at the branch tips — basic almond shapes
+      // pointing the way each twig was heading, light and see-through on the
+      // Prussian plate, so overlapping leaves build up into soft foliage.
+      const drawLeaves = () => {
+        if (!leaves || !tips.length) return;
+        // proportional to the twig (so a dense fern gets small leaves that
+        // don't blob together), but capped so a sparse hand-drawn plant with
+        // very long twigs still gets little basic leaves, not giant ones.
+        const len = Math.min(18 * scale, 28);
+        const wid = Math.min(6 * scale, 9);
+        ctx.lineCap = "round";
+        ctx.fillStyle = "rgba(234,243,246,0.22)";
+        ctx.strokeStyle = "rgba(234,243,246,0.45)";
+        ctx.lineWidth = Math.max(0.4, Math.min(1, scale * 1.6));
+        for (let k = 0; k < tips.length; k += 3) {
+          const bx = tips[k] * scale + ox;
+          const by = tips[k + 1] * scale + oy;
+          const ang = tips[k + 2];
+          const tx = bx + len * Math.cos(ang);
+          const ty = by + len * Math.sin(ang);
+          const mx = bx + len * 0.5 * Math.cos(ang);
+          const my = by + len * 0.5 * Math.sin(ang);
+          const px = Math.cos(ang + Math.PI / 2);
+          const py = Math.sin(ang + Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.quadraticCurveTo(mx + px * wid, my + py * wid, tx, ty);
+          ctx.quadraticCurveTo(mx - px * wid, my - py * wid, bx, by);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      };
+
       if (!animate || n < 60) {
         drawRange(0, n);
+        drawLeaves();
       } else {
         const frames = 85;
         const chunk = Math.max(1, Math.ceil(n / frames));
@@ -651,6 +751,7 @@ export default function HortusGrammaticus() {
           drawRange(i, next);
           i = next;
           if (i < n) rafRef.current = requestAnimationFrame(tick);
+          else drawLeaves();
         };
         rafRef.current = requestAnimationFrame(tick);
       }
@@ -693,7 +794,7 @@ export default function HortusGrammaticus() {
     }
 
     return () => cancelAnimationFrame(rafRef.current);
-  }, [mode, grown, divergence, count, floretSize, dims, reducedMotion]);
+  }, [mode, grown, leaves, divergence, count, floretSize, dims, reducedMotion]);
 
   const plateNo = custom
     ? "?"
@@ -766,261 +867,149 @@ export default function HortusGrammaticus() {
           </p>
         </header>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* ——— the plate ——— */}
-          <div className="flex-1 min-w-0">
-            <div
-              className="relative rounded-sm overflow-hidden"
-              style={{
-                border: `1px solid ${C.plateGlow}`,
-                boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
-              }}
-            >
-              <div ref={wrapRef} className="w-full" style={{ aspectRatio: "1 / 1.05" }}>
-                <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
-              </div>
-
-              {/* empty seed bed, empty plate */}
-              {mode === "d" && !drawn.rule && (
-                <div
-                  className="absolute inset-0 flex items-center justify-center px-10 text-center pointer-events-none"
+        {/* Everything stacks in one centred column now: the potting-bench
+            drawer of controls on top, the tree plate below it, then (hand mode)
+            the seed bed and the grammar it writes. Adjust up top, watch the
+            plate change below — the whole point of the rearrange. */}
+        <div style={{ maxWidth: 680, margin: "0 auto" }}>
+          {/* ——— the potting bench: a sideways-slidey drawer, Mooring-style ——— */}
+          <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em", marginBottom: 8 }}>
+            The potting bench
+          </div>
+          <div
+            style={{
+              display: "flex",
+              overflowX: "auto",
+              WebkitOverflowScrolling: "touch",
+              border: `1px solid ${C.ink}`,
+              borderRadius: 2,
+              background: C.panel,
+            }}
+          >
+            {/* specimen chooser — each plant is its own plain drawer section
+                now, no pill borders: a row of italic Latin names you swipe
+                through, the chosen one quietly marked with a gold radix dot
+                (the same mark as the seed bed's root). Keeps the drawer short
+                and lets the plants be the focus. */}
+            {PRESETS.map((p) => {
+              const active = p.id === presetId && !custom;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => selectPreset(p)}
+                  title={p.common}
                   style={{
+                    flex: "0 0 auto",
+                    border: "none",
+                    borderRight: `1px solid ${C.plateGlow}`,
+                    background: "transparent",
+                    cursor: "pointer",
+                    padding: "11px 16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 4,
                     fontFamily: "'Cormorant Garamond', Georgia, serif",
                     fontStyle: "italic",
-                    fontSize: "1.2rem",
-                    color: C.faded,
-                    lineHeight: 1.5,
+                    fontSize: "1rem",
+                    fontWeight: active ? 500 : 400,
+                    whiteSpace: "nowrap",
+                    color: active ? C.ink : C.faded,
                   }}
                 >
-                  Nothing sown yet. Ink a few edges in the seed bed — the lowest stroke
-                  becomes the root, and the grammar writes itself.
-                </div>
-              )}
+                  <span>{p.latin}</span>
+                  {/* the radix dot: gold when chosen, transparent otherwise so
+                      nothing shifts as you pick */}
+                  <span style={{ fontSize: 8, lineHeight: 1, color: active ? C.gold : "transparent" }}>
+                    ●
+                  </span>
+                </button>
+              );
+            })}
 
-              {/* plate number */}
-              <div
-                className="absolute top-3 right-4 text-xs"
-                style={{ color: C.dim, letterSpacing: "0.2em" }}
-              >
-                PLATE {plateNo}
-              </div>
-
-              {/* specimen label */}
-              <div className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-end justify-between gap-3"
-                style={{ background: "linear-gradient(to top, rgba(11,28,44,0.85), rgba(11,28,44,0))" }}>
-                <div>
-                  <div
-                    style={{
-                      fontFamily: "'Cormorant Garamond', Georgia, serif",
-                      fontStyle: "italic",
-                      fontSize: "1.35rem",
-                      lineHeight: 1.1,
-                    }}
-                  >
-                    {label.latin}
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: C.faded }}>
-                    {label.common}
-                  </div>
-                </div>
-                <div className="text-right text-xs hidden sm:block" style={{ color: C.dim, maxWidth: "24ch" }}>
-                  {label.note}
-                </div>
-              </div>
-            </div>
-
-            {grown?.pruned && mode !== "p" && (
-              <p className="mt-2 text-xs" style={{ color: C.gold }}>
-                Pruned at generation {grown.gens} — the grammar outgrew its pot.
-              </p>
-            )}
-          </div>
-
-          {/* ——— the potting bench ——— */}
-          <div className="w-full lg:w-80 shrink-0">
-            {/* specimens */}
-            <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em" }}>
-              Specimens
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {PRESETS.map((p) => {
-                const active = p.id === presetId && !custom;
-                return (
+            {/* grammar & hand-drawn dials */}
+            {mode !== "p" && (
+              <>
+                <DrawerCard label="Generations" value={genValue} width={150}>
+                  <input
+                    type="range"
+                    min={1}
+                    max={genMax}
+                    step={1}
+                    value={genValue}
+                    onChange={(e) => setIterations(+e.target.value)}
+                    style={sliderStyle}
+                    aria-label="Generations"
+                  />
+                </DrawerCard>
+                <DrawerCard
+                  label="Angle"
+                  value={`${angle}°`}
+                  valueColor={mode === "d" && onSquare ? C.gold : C.ink}
+                  width={mode === "d" ? 198 : 150}
+                >
+                  <input
+                    type="range"
+                    min={2}
+                    max={mode === "d" ? 160 : 90}
+                    step={0.5}
+                    value={angle}
+                    onChange={(e) => setAngle(+e.target.value)}
+                    style={{ ...sliderStyle, accentColor: mode === "d" && onSquare ? C.gold : C.ink }}
+                    aria-label="Branching angle"
+                  />
+                  {mode === "d" && (
+                    <div className="flex items-center justify-between" style={{ gap: 6 }}>
+                      <span style={{ fontSize: 10, color: onSquare ? C.gold : C.dim, whiteSpace: "nowrap" }}>
+                        {onSquare
+                          ? "true to the paper"
+                          : `${angle > 90 ? "+" : "−"}${Math.abs(angle - 90).toFixed(1)}° off square`}
+                      </span>
+                      <button
+                        onClick={() => setAngle(90)}
+                        className="px-2 rounded-full"
+                        style={{
+                          border: `1px solid ${C.gold}`,
+                          color: onSquare ? C.page : C.gold,
+                          background: onSquare ? C.gold : "transparent",
+                          fontSize: 11,
+                          lineHeight: "18px",
+                        }}
+                        title="Snap to the right angle, 90°"
+                      >
+                        ∟
+                      </button>
+                    </div>
+                  )}
+                </DrawerCard>
+                <DrawerCard label="Wildness" value={wildness} width={150}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={10}
+                    step={0.5}
+                    value={wildness}
+                    onChange={(e) => setWildness(+e.target.value)}
+                    style={sliderStyle}
+                    aria-label="Wildness — organic angle jitter"
+                  />
+                </DrawerCard>
+                <DrawerCard label="Leaves" value={leaves ? "🍃" : null} width={112}>
                   <button
-                    key={p.id}
-                    onClick={() => selectPreset(p)}
-                    className="px-3 py-1.5 text-xs rounded-full transition-colors"
+                    onClick={() => setLeaves((v) => !v)}
+                    aria-pressed={leaves}
+                    className="w-full py-1.5 text-xs rounded-sm transition-colors"
                     style={{
-                      border: `1px solid ${active ? C.ink : C.plateGlow}`,
-                      background: active ? C.ink : "transparent",
-                      color: active ? C.page : C.faded,
-                      fontStyle: "italic",
-                      fontFamily: "'Cormorant Garamond', Georgia, serif",
-                      fontSize: "0.95rem",
+                      border: `1px solid ${leaves ? C.ink : C.plateGlow}`,
+                      background: leaves ? C.ink : "transparent",
+                      color: leaves ? C.page : C.faded,
                     }}
                   >
-                    {p.latin}
+                    {leaves ? "on" : "off"}
                   </button>
-                );
-              })}
-            </div>
-
-            {/* ——— the seminarium ——— */}
-            {mode === "d" && (
-              <div className="mt-6">
-                <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em" }}>
-                  Seminarium — the seed bed
-                </div>
-                <p className="mt-1.5 mb-3 text-xs leading-relaxed" style={{ color: C.dim }}>
-                  Ink the graph paper: this is generation one, drawn by hand. Tap or drag
-                  along an edge; tap again to erase.
-                </p>
-
-                <SeedTray strokes={strokes} setStrokes={setStrokes} drawn={drawn} />
-
-                {drawn.rule && (
-                  <p className="mt-2 text-xs leading-relaxed" style={{ color: C.dim }}>
-                    <span style={{ color: C.gold }}>●</span> radix — the lowest inked
-                    point; the plant reads upward from it.
-                    {drawn.loose > 0 && (
-                      <> Pale strokes aren't joined to the root, so they stay out of the grammar.</>
-                    )}
-                  </p>
-                )}
-
-                <div className="mt-4">
-                  <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em" }}>
-                    The grammar, self-written
-                  </div>
-                  <div
-                    className="mt-2 px-2 py-1.5 text-sm rounded-sm overflow-y-auto"
-                    style={{
-                      background: C.plate,
-                      border: `1px solid ${C.plateGlow}`,
-                      color: C.ink,
-                      maxHeight: "8rem",
-                    }}
-                  >
-                    <div>
-                      <span style={{ color: C.dim }}>axiom&nbsp;&nbsp;</span>F
-                    </div>
-                    <div style={{ wordBreak: "break-all" }}>
-                      <span style={{ color: C.dim }}>F → </span>
-                      {drawn.rule || <span style={{ color: C.dim }}>…</span>}
-                    </div>
-                  </div>
-                  <p className="mt-1.5 text-xs leading-relaxed" style={{ color: C.dim }}>
-                    Each generation rewrites every stroke as the whole gesture.
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => setStrokes(new Set())}
-                      disabled={strokes.size === 0}
-                      className="flex-1 py-1.5 text-xs rounded-sm"
-                      style={{
-                        border: `1px solid ${C.plateGlow}`,
-                        color: strokes.size ? C.faded : C.dim,
-                        background: "transparent",
-                        opacity: strokes.size ? 1 : 0.5,
-                      }}
-                    >
-                      Clear the tray
-                    </button>
-                    <button
-                      onClick={refineAsText}
-                      disabled={!drawn.rule}
-                      className="flex-1 py-1.5 text-xs rounded-sm"
-                      style={{
-                        border: `1px solid ${C.plateGlow}`,
-                        color: drawn.rule ? C.faded : C.dim,
-                        background: "transparent",
-                        opacity: drawn.rule ? 1 : 0.5,
-                      }}
-                      title="Carry this rule into the grammar editor for hand-tuning"
-                    >
-                      Refine as text →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* dials */}
-            <div className="mt-6 space-y-5">
-              {mode !== "p" && (
-                <>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1" style={{ color: C.faded }}>
-                      <span>Generations</span>
-                      <span style={{ color: C.ink }}>{genValue}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1}
-                      max={genMax}
-                      step={1}
-                      value={genValue}
-                      onChange={(e) => setIterations(+e.target.value)}
-                      style={sliderStyle}
-                      aria-label="Generations"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1" style={{ color: C.faded }}>
-                      <span>Branching angle</span>
-                      <span style={{ color: mode === "d" && onSquare ? C.gold : C.ink }}>{angle}°</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={2}
-                      max={mode === "d" ? 160 : 90}
-                      step={0.5}
-                      value={angle}
-                      onChange={(e) => setAngle(+e.target.value)}
-                      style={{
-                        ...sliderStyle,
-                        accentColor: mode === "d" && onSquare ? C.gold : C.ink,
-                      }}
-                      aria-label="Branching angle"
-                    />
-                    {mode === "d" && (
-                      <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-xs" style={{ color: onSquare ? C.gold : C.dim }}>
-                          {onSquare
-                            ? "true to the graph paper"
-                            : `${angle > 90 ? "+" : "−"}${Math.abs(angle - 90).toFixed(1)}° off the square`}
-                        </span>
-                        <button
-                          onClick={() => setAngle(90)}
-                          className="px-2.5 py-1 text-xs rounded-full"
-                          style={{
-                            border: `1px solid ${C.gold}`,
-                            color: onSquare ? C.page : C.gold,
-                            background: onSquare ? C.gold : "transparent",
-                          }}
-                          title="Snap to the right angle, 90°"
-                        >
-                          ∟
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1" style={{ color: C.faded }}>
-                      <span>Wildness</span>
-                      <span style={{ color: C.ink }}>{wildness}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={10}
-                      step={0.5}
-                      value={wildness}
-                      onChange={(e) => setWildness(+e.target.value)}
-                      style={sliderStyle}
-                      aria-label="Wildness — organic angle jitter"
-                    />
-                  </div>
+                </DrawerCard>
+                <DrawerCard width={130} last>
                   <button
                     onClick={growAgain}
                     className="w-full py-2 text-sm rounded-sm transition-colors"
@@ -1028,80 +1017,76 @@ export default function HortusGrammaticus() {
                   >
                     Grow again
                   </button>
-                </>
-              )}
+                </DrawerCard>
+              </>
+            )}
 
-              {mode === "p" && (
-                <>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1" style={{ color: C.faded }}>
-                      <span>Divergence angle</span>
-                      <span style={{ color: nearGolden ? C.gold : C.ink }}>
-                        {divergence.toFixed(3)}°
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={100}
-                      max={170}
-                      step={0.005}
-                      value={divergence}
-                      onChange={(e) => setDivergence(+e.target.value)}
-                      style={{ ...sliderStyle, accentColor: nearGolden ? C.gold : C.ink }}
-                      aria-label="Divergence angle between successive florets"
-                    />
-                    <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-xs" style={{ color: nearGolden ? C.gold : C.dim }}>
-                        {nearGolden
-                          ? "in tune with φ"
-                          : `${deltaPhi > 0 ? "+" : ""}${deltaPhi.toFixed(3)}° from φ`}
-                      </span>
-                      <button
-                        onClick={() => setDivergence(GOLDEN)}
-                        className="px-2.5 py-1 text-xs rounded-full"
-                        style={{
-                          border: `1px solid ${C.gold}`,
-                          color: nearGolden ? C.page : C.gold,
-                          background: nearGolden ? C.gold : "transparent",
-                        }}
-                        title="Snap to the golden angle, 137.508°"
-                      >
-                        φ
-                      </button>
-                    </div>
+            {/* phyllotaxis dials */}
+            {mode === "p" && (
+              <>
+                <DrawerCard
+                  label="Divergence"
+                  value={`${divergence.toFixed(3)}°`}
+                  valueColor={nearGolden ? C.gold : C.ink}
+                  width={212}
+                >
+                  <input
+                    type="range"
+                    min={100}
+                    max={170}
+                    step={0.005}
+                    value={divergence}
+                    onChange={(e) => setDivergence(+e.target.value)}
+                    style={{ ...sliderStyle, accentColor: nearGolden ? C.gold : C.ink }}
+                    aria-label="Divergence angle between successive florets"
+                  />
+                  <div className="flex items-center justify-between" style={{ gap: 6 }}>
+                    <span style={{ fontSize: 10, color: nearGolden ? C.gold : C.dim, whiteSpace: "nowrap" }}>
+                      {nearGolden
+                        ? "in tune with φ"
+                        : `${deltaPhi > 0 ? "+" : ""}${deltaPhi.toFixed(3)}° from φ`}
+                    </span>
+                    <button
+                      onClick={() => setDivergence(GOLDEN)}
+                      className="px-2 rounded-full"
+                      style={{
+                        border: `1px solid ${C.gold}`,
+                        color: nearGolden ? C.page : C.gold,
+                        background: nearGolden ? C.gold : "transparent",
+                        fontSize: 11,
+                        lineHeight: "18px",
+                      }}
+                      title="Snap to the golden angle, 137.508°"
+                    >
+                      φ
+                    </button>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1" style={{ color: C.faded }}>
-                      <span>Florets</span>
-                      <span style={{ color: C.ink }}>{count}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={50}
-                      max={1500}
-                      step={10}
-                      value={count}
-                      onChange={(e) => setCount(+e.target.value)}
-                      style={sliderStyle}
-                      aria-label="Number of florets"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1" style={{ color: C.faded }}>
-                      <span>Floret size</span>
-                      <span style={{ color: C.ink }}>{floretSize}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1}
-                      max={9}
-                      step={0.5}
-                      value={floretSize}
-                      onChange={(e) => setFloretSize(+e.target.value)}
-                      style={sliderStyle}
-                      aria-label="Floret size"
-                    />
-                  </div>
+                </DrawerCard>
+                <DrawerCard label="Florets" value={count} width={150}>
+                  <input
+                    type="range"
+                    min={50}
+                    max={1500}
+                    step={10}
+                    value={count}
+                    onChange={(e) => setCount(+e.target.value)}
+                    style={sliderStyle}
+                    aria-label="Number of florets"
+                  />
+                </DrawerCard>
+                <DrawerCard label="Floret size" value={floretSize} width={150}>
+                  <input
+                    type="range"
+                    min={1}
+                    max={9}
+                    step={0.5}
+                    value={floretSize}
+                    onChange={(e) => setFloretSize(+e.target.value)}
+                    style={sliderStyle}
+                    aria-label="Floret size"
+                  />
+                </DrawerCard>
+                <DrawerCard width={130} last>
                   <button
                     onClick={() => {
                       animateNext.current = true;
@@ -1114,82 +1099,224 @@ export default function HortusGrammaticus() {
                   >
                     Bloom again
                   </button>
-                  <p className="text-xs leading-relaxed" style={{ color: C.dim }}>
-                    Try 137.3°, then 137.6°, then let φ tune it. A twentieth of a degree is
-                    the whole difference between spokes and a sunflower.
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* grammar editor */}
-            {mode === "l" && (
-              <div className="mt-7">
-                <button
-                  onClick={() => setShowGrammar((v) => !v)}
-                  className="text-xs tracking-widest uppercase"
-                  style={{ color: C.dim, letterSpacing: "0.25em" }}
-                  aria-expanded={showGrammar}
-                >
-                  {showGrammar ? "− the grammar" : "+ the grammar"}
-                </button>
-
-                {showGrammar && (
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <label className="text-xs block mb-1" style={{ color: C.faded }} htmlFor="axiom">
-                        Axiom — the seed
-                      </label>
-                      <input
-                        id="axiom"
-                        value={draftAxiom}
-                        onChange={(e) => setDraftAxiom(e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm rounded-sm"
-                        style={{
-                          background: C.plate,
-                          border: `1px solid ${C.plateGlow}`,
-                          color: C.ink,
-                        }}
-                        spellCheck={false}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs block mb-1" style={{ color: C.faded }} htmlFor="rules">
-                        Rules — one per line
-                      </label>
-                      <textarea
-                        id="rules"
-                        value={draftRules}
-                        onChange={(e) => setDraftRules(e.target.value)}
-                        rows={3}
-                        className="w-full px-2 py-1.5 text-sm rounded-sm resize-y"
-                        style={{
-                          background: C.plate,
-                          border: `1px solid ${C.plateGlow}`,
-                          color: C.ink,
-                        }}
-                        spellCheck={false}
-                      />
-                    </div>
-                    <button
-                      onClick={applyGrammar}
-                      className="w-full py-2 text-sm rounded-sm"
-                      style={{ background: C.ink, color: C.page, border: `1px solid ${C.ink}` }}
-                    >
-                      Sow this grammar
-                    </button>
-                    <div className="text-xs leading-relaxed" style={{ color: C.dim }}>
-                      <span style={{ color: C.faded }}>F</span> step forward, drawing ·{" "}
-                      <span style={{ color: C.faded }}>+ / −</span> turn by the branching angle ·{" "}
-                      <span style={{ color: C.faded }}>[</span> remember this spot ·{" "}
-                      <span style={{ color: C.faded }}>]</span> return to it · any other letter
-                      is silent scaffolding, rewritten each generation.
-                    </div>
-                  </div>
-                )}
-              </div>
+                </DrawerCard>
+              </>
             )}
           </div>
+
+          {/* ——— the tree plate ——— */}
+          <div
+            className="relative rounded-sm overflow-hidden"
+            style={{
+              // A crisp 1px plate edge, and nothing else — no drop shadow.
+              // Flat: ink on a sheet, a sheet on the sky.
+              marginTop: 18,
+              border: `1px solid ${C.plateGlow}`,
+            }}
+          >
+            <div ref={wrapRef} className="w-full" style={{ aspectRatio: "1 / 1.05" }}>
+              <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+            </div>
+
+            {/* empty seed bed, empty plate */}
+            {mode === "d" && !drawn.rule && (
+              <div
+                className="absolute inset-0 flex items-center justify-center px-10 text-center pointer-events-none"
+                style={{
+                  fontFamily: "'Cormorant Garamond', Georgia, serif",
+                  fontStyle: "italic",
+                  fontSize: "1.2rem",
+                  color: C.onFaded,
+                  lineHeight: 1.5,
+                }}
+              >
+                Nothing sown yet. Ink a few edges in the seed bed below — the lowest stroke
+                becomes the root, and the grammar writes itself.
+              </div>
+            )}
+
+            {/* plate number */}
+            <div className="absolute top-3 right-4 text-xs" style={{ color: C.onDim, letterSpacing: "0.2em" }}>
+              PLATE {plateNo}
+            </div>
+
+            {/* specimen label — sits straight on the plate now, no scrim */}
+            <div className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-end justify-between gap-3">
+              <div>
+                <div
+                  style={{
+                    fontFamily: "'Cormorant Garamond', Georgia, serif",
+                    fontStyle: "italic",
+                    fontSize: "1.35rem",
+                    lineHeight: 1.1,
+                    color: C.onInk,
+                  }}
+                >
+                  {label.latin}
+                </div>
+                <div className="text-xs mt-0.5" style={{ color: C.onFaded }}>
+                  {label.common}
+                </div>
+              </div>
+              <div className="text-right text-xs hidden sm:block" style={{ color: C.onDim, maxWidth: "24ch" }}>
+                {label.note}
+              </div>
+            </div>
+          </div>
+
+          {grown?.pruned && mode !== "p" && (
+            <p className="mt-2 text-xs" style={{ color: C.gold }}>
+              Pruned at generation {grown.gens} — the grammar outgrew its pot.
+            </p>
+          )}
+
+          {mode === "p" && (
+            <p className="mt-3 text-xs leading-relaxed" style={{ color: C.dim, maxWidth: "52ch" }}>
+              Try 137.3°, then 137.6°, then let φ tune it. A twentieth of a degree is the whole
+              difference between spokes and a sunflower.
+            </p>
+          )}
+
+          {/* ——— the seed bed, just below the tree (hand mode) ——— */}
+          {mode === "d" && (
+            <div style={{ maxWidth: 460, margin: "22px auto 0" }}>
+              <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em" }}>
+                Seminarium — the seed bed
+              </div>
+              <p className="mt-1.5 mb-3 text-xs leading-relaxed" style={{ color: C.dim }}>
+                Ink the graph paper: this is generation one, drawn by hand. Tap or drag along an
+                edge; tap again to erase — the tree above grows as you go.
+              </p>
+
+              <SeedTray strokes={strokes} setStrokes={setStrokes} drawn={drawn} />
+
+              {drawn.rule && (
+                <p className="mt-2 text-xs leading-relaxed" style={{ color: C.dim }}>
+                  <span style={{ color: C.gold }}>●</span> radix — the lowest inked point; the
+                  plant reads upward from it.
+                  {drawn.loose > 0 && (
+                    <> Pale strokes aren't joined to the root, so they stay out of the grammar.</>
+                  )}
+                </p>
+              )}
+
+              {/* the grammar it wrote, below the grid */}
+              <div className="mt-4">
+                <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em" }}>
+                  The grammar, self-written
+                </div>
+                <div
+                  className="mt-2 px-2 py-1.5 text-sm rounded-sm overflow-y-auto"
+                  style={{
+                    background: C.plate,
+                    border: `1px solid ${C.plateGlow}`,
+                    color: C.onInk,
+                    maxHeight: "8rem",
+                  }}
+                >
+                  <div>
+                    <span style={{ color: C.onDim }}>axiom&nbsp;&nbsp;</span>F
+                  </div>
+                  <div style={{ wordBreak: "break-all" }}>
+                    <span style={{ color: C.onDim }}>F → </span>
+                    {drawn.rule || <span style={{ color: C.onDim }}>…</span>}
+                  </div>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed" style={{ color: C.dim }}>
+                  Each generation rewrites every stroke as the whole gesture.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => setStrokes(new Set())}
+                    disabled={strokes.size === 0}
+                    className="flex-1 py-1.5 text-xs rounded-sm"
+                    style={{
+                      border: `1px solid ${C.plateGlow}`,
+                      color: strokes.size ? C.faded : C.dim,
+                      background: "transparent",
+                      opacity: strokes.size ? 1 : 0.5,
+                    }}
+                  >
+                    Clear the tray
+                  </button>
+                  <button
+                    onClick={refineAsText}
+                    disabled={!drawn.rule}
+                    className="flex-1 py-1.5 text-xs rounded-sm"
+                    style={{
+                      border: `1px solid ${C.plateGlow}`,
+                      color: drawn.rule ? C.faded : C.dim,
+                      background: "transparent",
+                      opacity: drawn.rule ? 1 : 0.5,
+                    }}
+                    title="Carry this rule into the grammar editor for hand-tuning"
+                  >
+                    Refine as text →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ——— the grammar editor, below the plate (preset mode) ——— */}
+          {mode === "l" && (
+            <div style={{ maxWidth: 460, margin: "18px auto 0" }}>
+              <button
+                onClick={() => setShowGrammar((v) => !v)}
+                className="text-xs tracking-widest uppercase"
+                style={{ color: C.dim, letterSpacing: "0.25em" }}
+                aria-expanded={showGrammar}
+              >
+                {showGrammar ? "− the grammar" : "+ the grammar"}
+              </button>
+
+              {showGrammar && (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="text-xs block mb-1" style={{ color: C.faded }} htmlFor="axiom">
+                      Axiom — the seed
+                    </label>
+                    <input
+                      id="axiom"
+                      value={draftAxiom}
+                      onChange={(e) => setDraftAxiom(e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm rounded-sm"
+                      style={{ background: C.plate, border: `1px solid ${C.plateGlow}`, color: C.onInk }}
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block mb-1" style={{ color: C.faded }} htmlFor="rules">
+                      Rules — one per line
+                    </label>
+                    <textarea
+                      id="rules"
+                      value={draftRules}
+                      onChange={(e) => setDraftRules(e.target.value)}
+                      rows={3}
+                      className="w-full px-2 py-1.5 text-sm rounded-sm resize-y"
+                      style={{ background: C.plate, border: `1px solid ${C.plateGlow}`, color: C.onInk }}
+                      spellCheck={false}
+                    />
+                  </div>
+                  <button
+                    onClick={applyGrammar}
+                    className="w-full py-2 text-sm rounded-sm"
+                    style={{ background: C.ink, color: C.page, border: `1px solid ${C.ink}` }}
+                  >
+                    Sow this grammar
+                  </button>
+                  <div className="text-xs leading-relaxed" style={{ color: C.dim }}>
+                    <span style={{ color: C.faded }}>F</span> step forward, drawing ·{" "}
+                    <span style={{ color: C.faded }}>+ / −</span> turn by the branching angle ·{" "}
+                    <span style={{ color: C.faded }}>[</span> remember this spot ·{" "}
+                    <span style={{ color: C.faded }}>]</span> return to it · any other letter
+                    is silent scaffolding, rewritten each generation.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <footer className="mt-10 text-xs" style={{ color: C.dim }}>
