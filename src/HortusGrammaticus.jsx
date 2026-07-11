@@ -116,9 +116,32 @@ const PRESETS = [
   },
 ];
 
-// The app opens on the fern — Filix mathematica is too beautiful not to greet
-// you — even though Planta manuscripta leads the drawer for playing.
+// FERN still furnishes the grammar editor's opening contents (a fair starting
+// sentence if you wander into the text mode), but the app no longer opens on
+// it. It opens on Planta manuscripta, with a plant already standing.
 const FERN = PRESETS.find((p) => p.id === "fern");
+
+// The opening plant — a wind-blown moor tree, drawn by hand in the seed bed
+// and left standing for every visitor. These are the inked edges and the
+// budded crossings of that first drawing; the seminarium transcribes them into
+// their own grammar (verified to write exactly the rule the drawing did), and
+// the plate grows it fresh each load. The angle, wildness and generations that
+// pose it live in the component's opening state, alongside a new random seed
+// per window — so most loads give a sensible tree and the odd one comes up
+// struck by lightning, which is only right on the moors.
+const OPENING_STROKES = [
+  // the trunk — column 4, from the crown bud down to the radix
+  "V:4,1", "V:4,2", "V:4,3", "V:4,4", "V:4,5", "V:4,6", "V:4,7", "V:4,8", "V:4,9",
+  // the high crossbar and the little budded spur rising from it
+  "H:2,3", "H:3,3", "H:4,3", "V:3,2",
+  // the left arm, ending in a bud
+  "H:2,4", "H:3,4",
+  // the long right arm, ending in a bud
+  "H:4,6", "H:5,6", "H:6,6", "H:7,6",
+  // a short right twig
+  "H:4,7",
+];
+const OPENING_BUDS = ["4,1", "3,2", "2,4", "8,6"];
 
 // deterministic little chaos
 function mulberry32(seed) {
@@ -702,21 +725,24 @@ function SnapChip({ on, onClick, title, children }) {
 // ————————————————————————————————————————————————
 
 export default function HortusGrammaticus() {
-  // Open on the fern, for admiring; Planta manuscripta waits first in the
-  // drawer, one tap away, for playing.
-  const [presetId, setPresetId] = useState("fern");
+  // Open on Planta manuscripta, with the wind-blown moor tree already standing
+  // in the seed bed (see OPENING_STROKES / OPENING_BUDS). The other specimens
+  // wait one tap away in the drawer.
+  const [presetId, setPresetId] = useState("hand");
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
 
   const [axiom, setAxiom] = useState(FERN.axiom);
   const [rulesText, setRulesText] = useState(FERN.rules);
   const [iterations, setIterations] = useState(FERN.iterations);
   const [maxIter, setMaxIter] = useState(FERN.maxIter);
-  const [angle, setAngle] = useState(FERN.angle);
-  const [wildness, setWildness] = useState(FERN.wildness);
-  const [seed, setSeed] = useState(7);
+  const [angle, setAngle] = useState(42.5); // the opening tree's branching angle
+  const [wildness, setWildness] = useState(3); // its weather — some loads come up struck by lightning
+  // a fresh seed every window, so the opening tree grows with the weather of
+  // the moment rather than the same pose each time (grow-again reshuffles it)
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 2147483646) + 1);
   const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
   const [custom, setCustom] = useState(false);
-  const [mode, setMode] = useState("l"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
+  const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
 
   // draft grammar (edited but not yet grown)
   const [draftAxiom, setDraftAxiom] = useState(FERN.axiom);
@@ -725,8 +751,8 @@ export default function HortusGrammaticus() {
 
   // hand-drawn strokes on the seed bed (survive changes of specimen),
   // and the gemmae — budded crossings where the pattern regrows
-  const [strokes, setStrokes] = useState(() => new Set());
-  const [buds, setBuds] = useState(() => new Set());
+  const [strokes, setStrokes] = useState(() => new Set(OPENING_STROKES));
+  const [buds, setBuds] = useState(() => new Set(OPENING_BUDS));
 
   // phyllotaxis state
   const [divergence, setDivergence] = useState(GOLDEN);
