@@ -45,6 +45,40 @@ plain SVG and one canvas.
 
 ---
 
+## Embedding it in WordPress (no double scrollbar)
+
+An iframe can't guess how tall the toy has grown, so it picks a height, the toy
+overflows it, and you get a second scrollbar riding beside the page's own. The
+toy fixes its half automatically: on every change it tells its parent page how
+tall it is (a `postMessage` of `{ type: "planta:height", height }`). All the
+parent has to do is listen and resize the frame to match. Paste this once into
+the page or a Custom HTML block — set `src` to your Vercel URL:
+
+```html
+<iframe id="planta" src="https://YOUR-APP.vercel.app/"
+        style="width:100%;border:0;display:block" scrolling="no"></iframe>
+<script>
+  addEventListener("message", function (e) {
+    if (e.data && e.data.type === "planta:height") {
+      document.getElementById("planta").style.height = e.data.height + "px";
+    }
+  });
+</script>
+```
+
+The `scrolling="no"` and the height-to-fit are what banish the inner bar; the
+message keeps the frame the right size as the plate and the seed bed grow.
+
+## Taking a plate away
+
+Under each plate the drawer offers two ways to press it: **png** (a pixel
+arboretum for the phone) and **svg** — the same specimen as vector line and
+leaf, so it scales to any title or header without going soft. The SVG isn't a
+screenshot of the canvas; it replays the very geometry the plate was drawn from
+— every segment, leaf and floret — so a tree stays a tree all the way down.
+
+---
+
 *One of a family that also holds Mooring, the Persicaria Portal, and
 Berm-Ester. Every specimen here is a sentence that kept talking — and one of
 them is in your own hand.*
