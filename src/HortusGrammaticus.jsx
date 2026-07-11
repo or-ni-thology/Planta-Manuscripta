@@ -60,7 +60,7 @@ const PRESETS = [
   {
     id: "fern",
     type: "l",
-    latin: "Filix mathematica",
+    latin: "Filix",
     common: "",
     axiom: "X",
     rules: "X → F+[[X]-X]-F[-FX]+X\nF → FF",
