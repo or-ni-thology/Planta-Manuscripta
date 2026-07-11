@@ -120,21 +120,27 @@ const PRESETS = [
 // drawer; we keep its grammar here as the fallback the editor is seeded with.
 const FERN = PRESETS.find((p) => p.id === "fern");
 
-// A little tree already sown on the seed bed, so Planta manuscripta greets you
-// grown rather than blank — the quickest way to show that the graph-paper
-// strokes on the seed bed become the plant on the plate, and that you can draw
-// your own. Trunk up the middle from the root at (5,9), a branch to each side
-// at (5,6), and a small two-armed crown off (5,3). Edge keys: "H:x,y" runs
+// A whole little tree already sown on the seed bed, so Planta manuscripta
+// greets you grown rather than blank — and so the drawing itself teaches the
+// trick, which isn't obvious: to draw a tree-SHAPED tree, give it a tall trunk
+// and branches at several heights that reach UP and OUT (not straight sideways),
+// longer low down and shorter toward a small crown, each ending in a twig. Grown
+// a generation, that silhouette repeats at every tip and the plant fills out
+// into a proper canopy. Root at the bottom-centre (5,9). Edge keys: "H:x,y" runs
 // (x,y)→(x+1,y); "V:x,y" runs (x,y)→(x,y+1).
 const HAND_SEED = [
-  // trunk, root to crown
-  "V:5,8", "V:5,7", "V:5,6", "V:5,5", "V:5,4", "V:5,3",
-  // left branch off the trunk at (5,6)
-  "H:4,6", "V:4,5", "V:4,4", "H:3,4",
-  // right branch off the trunk at (5,6)
-  "H:5,6", "V:6,5", "V:6,4", "H:6,4",
-  // the crown — a small fork off (5,3)
-  "H:4,3", "V:4,2", "H:5,3", "V:6,2",
+  // trunk, root to crown (tall)
+  "V:5,8", "V:5,7", "V:5,6", "V:5,5", "V:5,4", "V:5,3", "V:5,2",
+  // lower-left branch — long, reaching up and out, ending in a twig
+  "H:4,6", "V:4,5", "H:3,5", "V:3,4",
+  // lower-right branch (its mirror)
+  "H:5,6", "V:6,5", "H:6,5", "V:7,4",
+  // mid-left branch — shorter, higher up
+  "H:4,4", "V:4,3",
+  // mid-right branch
+  "H:5,4", "V:6,3",
+  // the crown — a small three-pronged fork off the top
+  "H:4,2", "V:4,1", "H:5,2", "V:6,1", "V:5,1",
 ];
 
 // deterministic little chaos
