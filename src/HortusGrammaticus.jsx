@@ -60,7 +60,7 @@ const PRESETS = [
   {
     id: "fern",
     type: "l",
-    latin: "Filix",
+    latin: "Filix - Fern",
     common: "",
     axiom: "X",
     rules: "X → F+[[X]-X]-F[-FX]+X\nF → FF",
@@ -72,8 +72,8 @@ const PRESETS = [
   {
     id: "tree",
     type: "l",
-    latin: "Arbor recursiva",
-    common: "the recursive tree",
+    latin: "Quercus - Oak",
+    common: "",
     axiom: "F",
     rules: "F → FF+[+F-F-F]-[-F+F+F]",
     angle: 22.5,
@@ -84,8 +84,8 @@ const PRESETS = [
   {
     id: "seaweed",
     type: "l",
-    latin: "Fucus iterativus",
-    common: "drifting weed",
+    latin: "Fucus - Algae",
+    common: "",
     axiom: "F",
     rules: "F → F[+F]F[-F]F",
     angle: 25.7,
@@ -96,8 +96,8 @@ const PRESETS = [
   {
     id: "bramble",
     type: "l",
-    latin: "Dumus ramosus",
-    common: "the bramble",
+    latin: "Rubus - Bramble",
+    common: "",
     axiom: "F",
     rules: "F → F[+FF][-FF]F[-F][+F]F",
     angle: 35,
@@ -108,8 +108,8 @@ const PRESETS = [
   {
     id: "sunflower",
     type: "p",
-    latin: "Helianthus aureus",
-    common: "the counting flower",
+    latin: "Helianthus annuus",
+    common: "",
     divergence: GOLDEN,
     count: 620,
     size: 4,
@@ -1630,7 +1630,7 @@ export default function HortusGrammaticus() {
 
         <footer className="mt-10 text-xs" style={{ color: C.dim }}>
           After Anna Atkins (1843) &amp; Aristid Lindenmayer (1968). Every specimen here is a
-          sentence that kept talking — and one of them is in your own hand.
+          sentence that kept talking.
         </footer>
       </div>
     </div>
