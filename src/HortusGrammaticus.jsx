@@ -1206,21 +1206,15 @@ export default function HortusGrammaticus() {
         ::selection{background:${C.gold};color:${C.page};}
       `}</style>
 
-      <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
-        {/* ——— header ——— brutally cut off, on purpose: a blank space held
-            open for an illustrated title Alison will grow with the toy itself
-            (she can grow words into trees now). */}
-        <header aria-hidden="true" style={{ height: "clamp(90px, 14vh, 160px)" }} />
-
+      <div className="max-w-6xl mx-auto px-4 pb-8 md:pb-12">
         {/* Everything stacks in one centred column now: the potting-bench
-            drawer of controls on top, the tree plate below it, then (hand mode)
-            the seed bed and the grammar it writes. Adjust up top, watch the
-            plate change below — the whole point of the rearrange. */}
+            drawer of controls at the very top (flush with the page edge, so a
+            header can be balanced on top of it elsewhere), the tree plate below
+            it, then (hand mode) the seed bed and the grammar it writes. Adjust
+            up top, watch the plate change below — the whole point of the
+            rearrange. */}
         <div style={{ maxWidth: 680, margin: "0 auto" }}>
           {/* ——— the potting bench: a sideways-slidey drawer, Mooring-style ——— */}
-          <div className={labelCls} style={{ color: C.dim, letterSpacing: "0.25em", marginBottom: 8 }}>
-            The potting bench
-          </div>
           <div
             style={{
               display: "flex",
