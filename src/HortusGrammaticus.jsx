@@ -116,9 +116,26 @@ const PRESETS = [
   },
 ];
 
-// The app opens on the fern — Filix mathematica is too beautiful not to greet
-// you — even though Planta manuscripta leads the drawer for playing.
+// Filix mathematica — the fern — is still the showpiece, one tap away in the
+// drawer; we keep its grammar here as the fallback the editor is seeded with.
 const FERN = PRESETS.find((p) => p.id === "fern");
+
+// A little tree already sown on the seed bed, so Planta manuscripta greets you
+// grown rather than blank — the quickest way to show that the graph-paper
+// strokes on the seed bed become the plant on the plate, and that you can draw
+// your own. Trunk up the middle from the root at (5,9), a branch to each side
+// at (5,6), and a small two-armed crown off (5,3). Edge keys: "H:x,y" runs
+// (x,y)→(x+1,y); "V:x,y" runs (x,y)→(x,y+1).
+const HAND_SEED = [
+  // trunk, root to crown
+  "V:5,8", "V:5,7", "V:5,6", "V:5,5", "V:5,4", "V:5,3",
+  // left branch off the trunk at (5,6)
+  "H:4,6", "V:4,5", "V:4,4", "H:3,4",
+  // right branch off the trunk at (5,6)
+  "H:5,6", "V:6,5", "V:6,4", "H:6,4",
+  // the crown — a small fork off (5,3)
+  "H:4,3", "V:4,2", "H:5,3", "V:6,2",
+];
 
 // deterministic little chaos
 function mulberry32(seed) {
@@ -702,21 +719,26 @@ function SnapChip({ on, onClick, title, children }) {
 // ————————————————————————————————————————————————
 
 export default function HortusGrammaticus() {
-  // Open on the fern, for admiring; Planta manuscripta waits first in the
-  // drawer, one tap away, for playing.
-  const [presetId, setPresetId] = useState("fern");
+  // Open on Planta manuscripta, already grown: a starter tree is sown on the
+  // seed bed (HAND_SEED, below) so the first thing you meet is graph-paper
+  // strokes becoming a plant — the plainest hint that you can draw your own.
+  // Filix, and the rest of the drawer, wait one tap away for admiring.
+  const [presetId, setPresetId] = useState("hand");
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
 
   const [axiom, setAxiom] = useState(FERN.axiom);
   const [rulesText, setRulesText] = useState(FERN.rules);
-  const [iterations, setIterations] = useState(FERN.iterations);
+  // The drawn plant grows in whole generations; 2 shows it lush but still
+  // legibly the tree on the seed bed. (In hand mode the slider is capped at
+  // the drawing's own dynMax anyway.)
+  const [iterations, setIterations] = useState(2);
   const [maxIter, setMaxIter] = useState(FERN.maxIter);
-  const [angle, setAngle] = useState(FERN.angle);
+  const [angle, setAngle] = useState(90); // true to the graph paper, as hand mode wants
   const [wildness, setWildness] = useState(FERN.wildness);
   const [seed, setSeed] = useState(7);
   const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
   const [custom, setCustom] = useState(false);
-  const [mode, setMode] = useState("l"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
+  const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
 
   // draft grammar (edited but not yet grown)
   const [draftAxiom, setDraftAxiom] = useState(FERN.axiom);
@@ -725,7 +747,7 @@ export default function HortusGrammaticus() {
 
   // hand-drawn strokes on the seed bed (survive changes of specimen),
   // and the gemmae — budded crossings where the pattern regrows
-  const [strokes, setStrokes] = useState(() => new Set());
+  const [strokes, setStrokes] = useState(() => new Set(HAND_SEED));
   const [buds, setBuds] = useState(() => new Set());
 
   // phyllotaxis state
