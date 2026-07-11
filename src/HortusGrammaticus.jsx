@@ -61,7 +61,7 @@ const PRESETS = [
     id: "fern",
     type: "l",
     latin: "Filix mathematica",
-    common: "the grammatical fern",
+    common: "",
     axiom: "X",
     rules: "X → F+[[X]-X]-F[-FX]+X\nF → FF",
     angle: 25,
