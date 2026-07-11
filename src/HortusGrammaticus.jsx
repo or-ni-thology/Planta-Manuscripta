@@ -1206,7 +1206,7 @@ export default function HortusGrammaticus() {
         ::selection{background:${C.gold};color:${C.page};}
       `}</style>
 
-      <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
+      <div className="max-w-6xl mx-auto px-4 md:py-12">
         {/* ——— header ——— brutally cut off, on purpose: a blank space held
             open for an illustrated title Alison will grow with the toy itself
             (she can grow words into trees now). */}
