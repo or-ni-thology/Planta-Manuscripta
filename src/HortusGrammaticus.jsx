@@ -82,6 +82,22 @@ const PRESETS = [
     wildness: 1.5,
   },
   {
+    // The big one — a broad-canopied grammar tree with a budding X that keeps
+    // throwing new shoots, fine twigs, and wildness for organic sway. Fills the
+    // plate by the fifth generation (≈29k segments), right up to the pot's edge.
+    id: "elm",
+    type: "l",
+    latin: "Ulmus - Elm",
+    common: "",
+    axiom: "X",
+    rules:
+      "X → FFF[+FFF[X]]FF[-FFFF-F[+FF[X]F][-F]F]FF[+FF[X]][-FFF[X]]FFF[X]\nF → FF",
+    angle: 42.5,
+    iterations: 5,
+    maxIter: 5,
+    wildness: 2.5,
+  },
+  {
     id: "seaweed",
     type: "l",
     latin: "Fucus - Algae",
