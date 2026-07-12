@@ -49,21 +49,78 @@ const C = {
   leafStroke: "rgba(74,124,63,0.5)",
 };
 
-// The living tree's two palettes — the season of the leaf and the wood of the
-// bark. Kept as small hand-picked rows rather than a raw colour wheel, so the
-// drawer stays a herbarium of named tints, not a paint program. Each leaf tint
-// is a base [r,g,b]; the foliage is that colour worn translucent (the same
-// 0.25 fill / 0.5 stroke alphas the green always had), so twigs layer into soft
-// canopy. The first of each row is the tree's original green wood-and-leaf.
-const LEAF_TINTS = [
-  { id: "verdant", name: "verdant", rgb: [74, 124, 63] }, // the first spring green
-  { id: "moor", name: "moor sage", rgb: [122, 138, 108] }, // the grey-green of the windswept moor
-  { id: "gorse", name: "gorse", rgb: [196, 160, 46] }, // flowering yellow gorse
-  { id: "amber", name: "amber", rgb: [178, 116, 40] }, // turning autumn
-  { id: "rust", name: "rust", rgb: [150, 74, 42] }, // deep autumn, late
-  { id: "heather", name: "heather", rgb: [128, 96, 152] }, // moor heather in bloom
-  { id: "hoar", name: "hoar frost", rgb: [170, 180, 176] }, // the pale of winter rime
+// The living tree's leaf is one continuous slider — a whole hue circle, but
+// held at a muted lightness and chroma so nothing is ever garish. That muting
+// is the whole trick: with the whiteness and blackness poured in, the entire
+// wheel harmonises (a dusty red is terracotta, a greyed violet is heather), so
+// one honest hue axis carries greens without end AND gorse, amber, rust and
+// heather — a faded botanical colour-chart, not a paint program. The slider is
+// the hand's own HWB instinct with the W and B already poured; you just mooch.
+const LEAF_L = 0.64; // muted foliage lightness
+const LEAF_C = 0.09; // low chroma — everything stays dusty, the wheel harmonises
+
+// OKLCh → sRGB (Björn Ottosson). We think in OKLCh because a hue sweep there is
+// perceptually even — no muddy midpoints, every stop equally deliberate — then
+// bake to plain rgb so the canvas and the pressed SVG stay universally openable.
+function oklchToRgb(L, C, hDeg) {
+  const h = (hDeg * Math.PI) / 180;
+  const a = C * Math.cos(h);
+  const b = C * Math.sin(h);
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+  const l = l_ * l_ * l_;
+  const m = m_ * m_ * m_;
+  const s = s_ * s_ * s_;
+  const lin = (c) => {
+    c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(255, Math.round(c * 255)));
+  };
+  return [
+    lin(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    lin(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    lin(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
+  ];
+}
+
+// The old vocabulary survives as a name readout: the nearest anchor along the
+// wheel names the tint as you slide. Hues are OKLCh degrees at the leaf's L/C.
+const LEAF_NAMES = [
+  { h: 150, name: "verdant" },
+  { h: 122, name: "olive" },
+  { h: 100, name: "gorse" },
+  { h: 66, name: "amber" },
+  { h: 34, name: "rust" },
+  { h: 12, name: "brick" },
+  { h: 340, name: "heather" },
+  { h: 300, name: "dusk" },
+  { h: 255, name: "slate" },
+  { h: 205, name: "teal" },
+  { h: 175, name: "sage" },
 ];
+function nearestLeafName(hDeg) {
+  const h = ((hDeg % 360) + 360) % 360;
+  let best = LEAF_NAMES[0];
+  let bestD = 360;
+  for (const a of LEAF_NAMES) {
+    const raw = Math.abs(h - a.h);
+    const d = Math.min(raw, 360 - raw); // shortest way round the circle
+    if (d < bestD) {
+      bestD = d;
+      best = a;
+    }
+  }
+  return best.name;
+}
+// the slider's own painted track — the full muted ring, drawn once
+const LEAF_GRAD =
+  "linear-gradient(90deg," +
+  Array.from({ length: 25 }, (_, i) => {
+    const rgb = oklchToRgb(LEAF_L, LEAF_C, (i / 24) * 360);
+    return `rgb(${rgb[0]},${rgb[1]},${rgb[2]}) ${((i / 24) * 100).toFixed(1)}%`;
+  }).join(",") +
+  ")";
+
 const BARK_TINTS = [
   { id: "loam", name: "loam", hex: "#5e4426" }, // the first warm brown wood
   { id: "peat", name: "peat", hex: "#3b2c1c" }, // near-black, wet peat
@@ -790,7 +847,7 @@ export default function HortusGrammaticus() {
   // the moment rather than the same pose each time (grow-again reshuffles it)
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 2147483646) + 1);
   const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
-  const [leafTint, setLeafTint] = useState(0); // the season of the leaf — index into LEAF_TINTS
+  const [leafHue, setLeafHue] = useState(150); // the leaf's hue on the muted OKLCh wheel — a green to open on
   const [barkTint, setBarkTint] = useState(0); // the wood of the bark — index into BARK_TINTS
   const [custom, setCustom] = useState(false);
   const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
@@ -1095,7 +1152,7 @@ export default function HortusGrammaticus() {
   // worn translucent. Shared by the canvas and the SVG so a pressed plate keeps
   // exactly the tints on screen.
   const barkColor = (BARK_TINTS[barkTint] ?? BARK_TINTS[0]).hex;
-  const leafRgb = (LEAF_TINTS[leafTint] ?? LEAF_TINTS[0]).rgb;
+  const leafRgb = oklchToRgb(LEAF_L, LEAF_C, leafHue);
   const leafFillColor = leafTintFill(leafRgb);
   const leafStrokeColor = leafTintStroke(leafRgb);
 
@@ -1251,7 +1308,7 @@ export default function HortusGrammaticus() {
     }
 
     return () => cancelAnimationFrame(rafRef.current);
-  }, [mode, grown, leaves, leafTint, barkTint, divergence, count, floretSize, dims, reducedMotion]);
+  }, [mode, grown, leaves, leafHue, barkTint, divergence, count, floretSize, dims, reducedMotion]);
 
   const nearGolden = Math.abs(divergence - GOLDEN) < 0.02;
   const onSquare = Math.abs(angle - 90) < 0.25;
@@ -1289,6 +1346,12 @@ export default function HortusGrammaticus() {
         input[type=range]{height:20px;background:transparent;}
         button:focus-visible, input:focus-visible, textarea:focus-visible, [role=button]:focus-visible, [role=application]:focus-visible{outline:2px solid ${C.gold};outline-offset:2px;}
         ::selection{background:${C.gold};color:${C.page};}
+        /* the leaf hue slider wears its own painted track — the full muted ring
+           of tints — with a small pale thumb that reads on any hue beneath it */
+        input.leaf-hue{-webkit-appearance:none;appearance:none;height:14px;border-radius:7px;background:var(--leaf-grad);border:1px solid ${C.plateGlow};cursor:pointer;}
+        input.leaf-hue::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:${C.panel};border:1.5px solid ${C.ink};cursor:pointer;}
+        input.leaf-hue::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:${C.panel};border:1.5px solid ${C.ink};cursor:pointer;}
+        input.leaf-hue::-moz-range-track{height:14px;border-radius:7px;background:var(--leaf-grad);}
       `}</style>
 
       <div className="max-w-6xl mx-auto px-4 pb-8 md:pb-12">
@@ -1427,20 +1490,20 @@ export default function HortusGrammaticus() {
                   <>
                     <DrawerCard
                       label="Leaf"
-                      value={LEAF_TINTS[leafTint].name}
+                      value={nearestLeafName(leafHue)}
                       width={178}
                     >
-                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                        {LEAF_TINTS.map((t, i) => (
-                          <Swatch
-                            key={t.id}
-                            color={`rgb(${t.rgb[0]},${t.rgb[1]},${t.rgb[2]})`}
-                            on={i === leafTint}
-                            onClick={() => setLeafTint(i)}
-                            title={`Leaf — ${t.name}`}
-                          />
-                        ))}
-                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={360}
+                        step={1}
+                        value={leafHue}
+                        onChange={(e) => setLeafHue(+e.target.value)}
+                        className="leaf-hue"
+                        style={{ "--leaf-grad": LEAF_GRAD, width: "100%" }}
+                        aria-label="Leaf colour — hue, muted"
+                      />
                     </DrawerCard>
                     <DrawerCard
                       label="Bark"
