@@ -49,6 +49,31 @@ const C = {
   leafStroke: "rgba(74,124,63,0.5)",
 };
 
+// The living tree's two palettes — the season of the leaf and the wood of the
+// bark. Kept as small hand-picked rows rather than a raw colour wheel, so the
+// drawer stays a herbarium of named tints, not a paint program. Each leaf tint
+// is a base [r,g,b]; the foliage is that colour worn translucent (the same
+// 0.25 fill / 0.5 stroke alphas the green always had), so twigs layer into soft
+// canopy. The first of each row is the tree's original green wood-and-leaf.
+const LEAF_TINTS = [
+  { id: "verdant", name: "verdant", rgb: [74, 124, 63] }, // the first spring green
+  { id: "moor", name: "moor sage", rgb: [122, 138, 108] }, // the grey-green of the windswept moor
+  { id: "gorse", name: "gorse", rgb: [196, 160, 46] }, // flowering yellow gorse
+  { id: "amber", name: "amber", rgb: [178, 116, 40] }, // turning autumn
+  { id: "rust", name: "rust", rgb: [150, 74, 42] }, // deep autumn, late
+  { id: "heather", name: "heather", rgb: [128, 96, 152] }, // moor heather in bloom
+  { id: "hoar", name: "hoar frost", rgb: [170, 180, 176] }, // the pale of winter rime
+];
+const BARK_TINTS = [
+  { id: "loam", name: "loam", hex: "#5e4426" }, // the first warm brown wood
+  { id: "peat", name: "peat", hex: "#3b2c1c" }, // near-black, wet peat
+  { id: "ash", name: "ash", hex: "#6b6357" }, // grey weathered timber
+  { id: "birch", name: "silver birch", hex: "#b7b2a6" }, // pale bark, the moor's ghost tree
+  { id: "haw", name: "hawthorn", hex: "#7c5a34" }, // ruddy hedge-wood
+];
+const leafTintFill = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.25)`;
+const leafTintStroke = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`;
+
 const PRESETS = [
   {
     // First in the drawer — the plant in Alison's own hand leads the row.
@@ -722,6 +747,30 @@ function SnapChip({ on, onClick, title, children }) {
   );
 }
 
+// A little colour chip for the living tree — a filled dot that takes a gold
+// ring when it is the chosen tint, the same gold the specimens and snap chips
+// wear when they are switched on.
+function Swatch({ color, on, onClick, title }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      style={{
+        width: 15,
+        height: 15,
+        borderRadius: "50%",
+        background: color,
+        border: on ? `2px solid ${C.gold}` : `1px solid ${C.plateGlow}`,
+        boxShadow: on ? `0 0 0 1.5px ${C.panel}` : "none",
+        cursor: "pointer",
+        padding: 0,
+        flex: "0 0 auto",
+      }}
+    />
+  );
+}
+
 // ————————————————————————————————————————————————
 
 export default function HortusGrammaticus() {
@@ -741,6 +790,8 @@ export default function HortusGrammaticus() {
   // the moment rather than the same pose each time (grow-again reshuffles it)
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 2147483646) + 1);
   const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
+  const [leafTint, setLeafTint] = useState(0); // the season of the leaf — index into LEAF_TINTS
+  const [barkTint, setBarkTint] = useState(0); // the wood of the bark — index into BARK_TINTS
   const [custom, setCustom] = useState(false);
   const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
 
@@ -868,7 +919,7 @@ export default function HortusGrammaticus() {
       const ox = (w - bw * scale) / 2 - minX * scale;
       const oy = (h - bh * scale) / 2 - minY * scale;
       const n = segs.length / 5;
-      const stroke = leafy ? C.branch : C.line;
+      const stroke = leafy ? barkColor : C.line;
 
       let lines = "";
       for (let i = 0; i < n; i++) {
@@ -910,7 +961,7 @@ export default function HortusGrammaticus() {
             `Q${f(mx - px * wid)},${f(my - py * wid)} ${f(bx)},${f(by)} Z"/>`;
         }
         parts.push(
-          `<g fill="${C.leafFill}" stroke="${C.leafStroke}" stroke-linecap="round" stroke-width="${f(lw)}">${leafPaths}</g>`
+          `<g fill="${leafFillColor}" stroke="${leafStrokeColor}" stroke-linecap="round" stroke-width="${f(lw)}">${leafPaths}</g>`
         );
       }
     }
@@ -1040,6 +1091,14 @@ export default function HortusGrammaticus() {
   // through), brown wood, translucent green leaves. Phyllotaxis stays blue.
   const leafy = leaves && mode !== "p";
 
+  // the chosen wood and foliage — the bark's solid hex, and the leaf's base
+  // worn translucent. Shared by the canvas and the SVG so a pressed plate keeps
+  // exactly the tints on screen.
+  const barkColor = (BARK_TINTS[barkTint] ?? BARK_TINTS[0]).hex;
+  const leafRgb = (LEAF_TINTS[leafTint] ?? LEAF_TINTS[0]).rgb;
+  const leafFillColor = leafTintFill(leafRgb);
+  const leafStrokeColor = leafTintStroke(leafRgb);
+
   // render
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1089,7 +1148,7 @@ export default function HortusGrammaticus() {
         for (let i = from; i < to; i++) {
           const j = i * 5;
           const d = segs[j + 4];
-          ctx.strokeStyle = leafy ? C.branch : C.line;
+          ctx.strokeStyle = leafy ? barkColor : C.line;
           ctx.globalAlpha = Math.max(0.35, 0.95 - d * 0.055);
           ctx.lineWidth = Math.max(0.55, 2.4 - d * 0.3);
           ctx.beginPath();
@@ -1113,8 +1172,8 @@ export default function HortusGrammaticus() {
         const wid = Math.min(6 * scale, 9);
         const yCut = minY + (maxY - minY) * 0.7 + 0.001; // leaves live above this line
         ctx.lineCap = "round";
-        ctx.fillStyle = C.leafFill;
-        ctx.strokeStyle = C.leafStroke;
+        ctx.fillStyle = leafFillColor;
+        ctx.strokeStyle = leafStrokeColor;
         ctx.lineWidth = Math.max(0.4, Math.min(1, scale * 1.6));
         for (let k = 0; k < tips.length; k += 3) {
           if (tips[k + 1] > yCut) continue;
@@ -1192,7 +1251,7 @@ export default function HortusGrammaticus() {
     }
 
     return () => cancelAnimationFrame(rafRef.current);
-  }, [mode, grown, leaves, divergence, count, floretSize, dims, reducedMotion]);
+  }, [mode, grown, leaves, leafTint, barkTint, divergence, count, floretSize, dims, reducedMotion]);
 
   const nearGolden = Math.abs(divergence - GOLDEN) < 0.02;
   const onSquare = Math.abs(angle - 90) < 0.25;
@@ -1362,6 +1421,46 @@ export default function HortusGrammaticus() {
                 >
                   leaves
                 </DrawerAction>
+                {/* the living tree's tints — only once it is in leaf, so the
+                    drawer stays short until there is foliage and wood to dress */}
+                {leafy && (
+                  <>
+                    <DrawerCard
+                      label="Leaf"
+                      value={LEAF_TINTS[leafTint].name}
+                      width={178}
+                    >
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                        {LEAF_TINTS.map((t, i) => (
+                          <Swatch
+                            key={t.id}
+                            color={`rgb(${t.rgb[0]},${t.rgb[1]},${t.rgb[2]})`}
+                            on={i === leafTint}
+                            onClick={() => setLeafTint(i)}
+                            title={`Leaf — ${t.name}`}
+                          />
+                        ))}
+                      </div>
+                    </DrawerCard>
+                    <DrawerCard
+                      label="Bark"
+                      value={BARK_TINTS[barkTint].name}
+                      width={150}
+                    >
+                      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                        {BARK_TINTS.map((t, i) => (
+                          <Swatch
+                            key={t.id}
+                            color={t.hex}
+                            on={i === barkTint}
+                            onClick={() => setBarkTint(i)}
+                            title={`Bark — ${t.name}`}
+                          />
+                        ))}
+                      </div>
+                    </DrawerCard>
+                  </>
+                )}
                 <DrawerAction onClick={growAgain} width={118}>
                   grow again
                 </DrawerAction>
