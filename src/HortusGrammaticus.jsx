@@ -127,6 +127,7 @@ const BARK_TINTS = [
   { id: "ash", name: "ash", hex: "#6b6357" }, // grey weathered timber
   { id: "birch", name: "silver birch", hex: "#b7b2a6" }, // pale bark, the moor's ghost tree
   { id: "haw", name: "hawthorn", hex: "#7c5a34" }, // ruddy hedge-wood
+  { id: "haulm", name: "haulm", hex: "#2e4715" }, // dark olive stalk — the stems of persicarias
 ];
 const leafTintFill = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.25)`;
 const leafTintStroke = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`;
@@ -1508,9 +1509,9 @@ export default function HortusGrammaticus() {
                     <DrawerCard
                       label="Bark"
                       value={BARK_TINTS[barkTint].name}
-                      width={150}
+                      width={172}
                     >
-                      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                      <div style={{ display: "flex", gap: 7, justifyContent: "center" }}>
                         {BARK_TINTS.map((t, i) => (
                           <Swatch
                             key={t.id}
