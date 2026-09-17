@@ -129,8 +129,35 @@ const BARK_TINTS = [
   { id: "haw", name: "hawthorn", hex: "#7c5a34" }, // ruddy hedge-wood
   { id: "haulm", name: "haulm", hex: "#2e4715" }, // dark olive stalk — the stems of persicarias
 ];
-const leafTintFill = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.25)`;
-const leafTintStroke = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`;
+// Plain filled shapes, no outline — a bit more body than a first wash but
+// still see-through, so overlapping foliage still builds up softly.
+const leafTintFill = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.42)`;
+
+// Leaf and flower sizing — proportional to the twig (so a dense fern still
+// gets small foliage that doesn't blob together), capped so a sparse plant
+// with long twigs gets generous but not giant shapes. Shared by the canvas
+// and the SVG export so a pressed plate keeps exactly what's on screen.
+const LEAF_LEN = 24;
+const LEAF_LEN_MAX = 36;
+const LEAF_WID = 8;
+const LEAF_WID_MAX = 12;
+const FLOWER_SIZE = 18;
+const FLOWER_SIZE_MAX = 26;
+
+// The fleuron — a single glyph pip from IM Fell, kept exactly as the type
+// foundry drew it (its own font-unit path, one <path> under 3KB) and only
+// ever moved by a transform, never rewritten. However many tips bloom it,
+// the cost is one shared shape stamped repeatedly — no black hole of DOM.
+const FLEURON_D =
+  "M4.55 48.90Q4.55 48.05 4.85 47.60Q5.15 47.15 5.70 46.55Q5.85 46.40 6.17 46.02Q6.50 45.65 6.55 45.55Q6.60 45.45 6.72 45.17Q6.85 44.90 6.90 44.85Q6.95 44.80 7.08 44.60Q7.20 44.40 7.25 44.35L7.25 44.25L7.25 44.20L7.05 44L7 44Q6.25 44 5.72 44.40Q5.20 44.80 4.75 45.27Q4.30 45.75 3.77 46.15Q3.25 46.55 2.50 46.55Q1.80 46.55 1.70 45.85Q1.65 45.70 1.58 45.13Q1.50 44.55 1.50 44.35Q1.25 43.95 0.83 43.73Q0.40 43.50 0 43.35L0 43.15L0 43Q0.20 42.40 0.60 41.98Q1 41.55 1.50 41.15L1.50 39.80L1.85 39.45Q1.90 39.45 2.15 39.42Q2.40 39.40 2.50 39.40Q3.00 39.40 3.35 39.52Q3.70 39.65 3.95 39.83Q4.20 40 4.45 40.25Q4.70 40.50 5.05 40.80Q5.05 40.85 5.17 40.90Q5.30 40.95 5.40 41Q5.45 41 5.65 41.05Q5.85 41.10 5.90 41.15Q5.95 41.15 6.15 41.30Q6.35 41.45 6.40 41.50Q6.45 41.50 6.55 41.45Q6.65 41.40 6.70 41.40Q6.70 40.65 6.38 40.05Q6.05 39.45 5.63 38.90Q5.20 38.35 4.88 37.80Q4.55 37.25 4.55 36.55L4.55 36.25Q4.60 36.15 4.85 35.90Q5.10 35.65 5.20 35.60Q5.25 35.60 5.33 35.58Q5.40 35.55 5.45 35.55Q5.70 35.55 5.90 35.67Q6.10 35.80 6.35 35.80L6.45 35.80Q6.50 35.80 6.55 35.75Q6.60 35.75 6.65 35.60Q6.70 35.45 6.75 35.40Q6.80 35.40 7 35.27Q7.20 35.15 7.25 35.10Q7.35 35 7.68 34.67Q8 34.35 8.10 34.25L8.15 34.25Q8.20 34.25 8.20 34.25Q8.20 34.20 8.25 34.20Q8.65 34.20 8.72 34.65Q8.80 35.10 9.10 35.25Q9.15 35.30 9.35 35.35Q9.55 35.40 9.60 35.40Q9.65 35.45 9.85 35.67Q10.05 35.90 10.10 35.95Q10.70 36.35 10.93 36.42Q11.15 36.50 11.15 37.30Q11.15 37.40 11.13 37.58Q11.10 37.75 11.10 37.80Q11.10 37.90 10.90 38.20Q10.70 38.50 10.60 38.60Q10.40 38.85 9.78 39.48Q9.15 40.10 8.90 40.30Q8.90 40.40 8.82 40.65Q8.75 40.90 8.75 41L8.75 41.15Q8.75 41.50 9.15 41.50L9.35 41.50Q9.60 41.50 9.83 41.48Q10.05 41.45 10.25 41.30Q10.70 41 11.10 40.55Q11.50 40.10 11.95 39.73Q12.40 39.35 12.90 39.08Q13.40 38.80 14 38.80Q14.40 38.80 14.60 39.10Q14.80 39.40 14.80 39.80Q14.80 40.20 14.63 40.52Q14.45 40.85 14.45 41.25Q14.45 41.55 14.75 41.67Q15.05 41.80 15.40 41.90Q15.75 42 16.05 42.15Q16.35 42.30 16.35 42.65Q16.35 42.90 16.23 43.02Q16.10 43.15 15.85 43.35Q15.70 43.45 15.43 43.48Q15.15 43.50 14.90 43.52Q14.65 43.55 14.47 43.65Q14.30 43.75 14.30 44Q14.30 44.40 14.47 44.67Q14.65 44.95 14.65 45.35Q14.65 45.80 14.45 46.17Q14.25 46.55 13.80 46.55Q13.25 46.55 12.88 46.25Q12.50 45.95 12.10 45.55Q12 45.45 11.80 45.20Q11.60 44.95 11.38 44.70Q11.15 44.45 10.93 44.20Q10.70 43.95 10.60 43.85Q10.15 43.60 9.83 43.50Q9.50 43.40 8.95 43.40Q8.95 44 9.22 44.60Q9.50 45.20 9.88 45.73Q10.25 46.25 10.70 46.75Q11.15 47.25 11.45 47.70Q11.60 47.90 11.63 48.02Q11.65 48.15 11.65 48.30L11.65 48.60Q11.65 49.25 11.22 49.45Q10.80 49.65 10.25 49.65Q10 49.65 9.75 49.63Q9.50 49.60 9.25 49.55Q9.10 49.85 9.13 50.17Q9.15 50.50 8.90 50.75L8.40 51.25Q8.35 51.30 8.30 51.30L8.15 51.30Q7.65 51.30 7.17 50.80Q6.70 50.30 6.25 50.05Q5.95 49.90 5.63 49.88Q5.30 49.85 5.08 49.77Q4.85 49.70 4.70 49.52Q4.55 49.35 4.55 48.90Z";
+// Its own viewBox, in font units — the box we rotate and scale the glyph
+// around, so it blooms centred on the tip rather than hanging off a corner.
+const FLEURON_BOX = { w: 16.35, cx: 8.175, cy: 42.75 };
+let fleuronPath2D = null;
+function getFleuronPath2D() {
+  if (!fleuronPath2D) fleuronPath2D = new Path2D(FLEURON_D);
+  return fleuronPath2D;
+}
 
 const PRESETS = [
   {
@@ -849,6 +876,8 @@ export default function HortusGrammaticus() {
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 2147483646) + 1);
   const [leaves, setLeaves] = useState(false); // little translucent leaves at the branch tips
   const [leafHue, setLeafHue] = useState(150); // the leaf's hue on the muted OKLCh wheel — a green to open on
+  const [flowers, setFlowers] = useState(false); // little Fell fleurons blooming at the branch tips
+  const [flowerHue, setFlowerHue] = useState(66); // the flower's hue on the same muted wheel — amber to open on
   const [barkTint, setBarkTint] = useState(0); // the wood of the bark — index into BARK_TINTS
   const [custom, setCustom] = useState(false);
   const [mode, setMode] = useState("d"); // "l" grammar · "p" phyllotaxis · "d" drawn by hand
@@ -951,6 +980,10 @@ export default function HortusGrammaticus() {
     const f = (v) => Math.round(v * 100) / 100; // trim coordinates so the file stays light
     const parts = [];
 
+    // one shared fleuron glyph, referenced by every <use> below — the
+    // pressed plate carries the same shape once, however many tips bloom it.
+    if (flowers) parts.push(`<defs><path id="fleuron" d="${FLEURON_D}"/></defs>`);
+
     if (leafy) {
       // a transparent plate — the tree sits straight on the page
       parts.push(`<rect width="${w}" height="${h}" fill="none"/>`);
@@ -996,12 +1029,12 @@ export default function HortusGrammaticus() {
       );
 
       // the little translucent leaves, if the plate is in leaf — the same
-      // almond quadratics, only above the leaf line.
+      // almond quadratics, only above the leaf line. Plain shapes, no
+      // outline — just the fill, so overlapping foliage stays soft.
       if (leaves && tips.length) {
-        const len = Math.min(18 * scale, 28);
-        const wid = Math.min(6 * scale, 9);
+        const len = Math.min(LEAF_LEN * scale, LEAF_LEN_MAX);
+        const wid = Math.min(LEAF_WID * scale, LEAF_WID_MAX);
         const yCut = minY + (maxY - minY) * 0.7 + 0.001;
-        const lw = Math.max(0.4, Math.min(1, scale * 1.6));
         let leafPaths = "";
         for (let k = 0; k < tips.length; k += 3) {
           if (tips[k + 1] > yCut) continue;
@@ -1018,9 +1051,24 @@ export default function HortusGrammaticus() {
             `<path d="M${f(bx)},${f(by)} Q${f(mx + px * wid)},${f(my + py * wid)} ${f(tx)},${f(ty)} ` +
             `Q${f(mx - px * wid)},${f(my - py * wid)} ${f(bx)},${f(by)} Z"/>`;
         }
-        parts.push(
-          `<g fill="${leafFillColor}" stroke="${leafStrokeColor}" stroke-linecap="round" stroke-width="${f(lw)}">${leafPaths}</g>`
-        );
+        parts.push(`<g fill="${leafFillColor}">${leafPaths}</g>`);
+      }
+
+      // the same Fell fleurons, stamped as <use> against the one shared
+      // glyph in <defs> — a hundred blooms cost one shape, not a hundred.
+      if (flowers && tips.length) {
+        const size = Math.min(FLOWER_SIZE * scale, FLOWER_SIZE_MAX);
+        const s = size / FLEURON_BOX.w;
+        const yCut = minY + (maxY - minY) * 0.7 + 0.001;
+        let uses = "";
+        for (let k = 0; k < tips.length; k += 3) {
+          if (tips[k + 1] > yCut) continue;
+          const bx = f(tips[k] * scale + ox);
+          const by = f(tips[k + 1] * scale + oy);
+          const angDeg = f((tips[k + 2] * 180) / Math.PI + 90);
+          uses += `<use href="#fleuron" transform="translate(${bx},${by}) rotate(${angDeg}) scale(${f(s)}) translate(${f(-FLEURON_BOX.cx)},${f(-FLEURON_BOX.cy)})"/>`;
+        }
+        parts.push(`<g fill="${flowerFillColor}">${uses}</g>`);
       }
     }
 
@@ -1145,9 +1193,10 @@ export default function HortusGrammaticus() {
     return { ...t, gens, pruned };
   }, [mode, axiom, rulesText, iterations, angle, wildness, seed, drawn]);
 
-  // leaf mode turns the whole plate living: no cyanotype wash (the sky shows
-  // through), brown wood, translucent green leaves. Phyllotaxis stays blue.
-  const leafy = leaves && mode !== "p";
+  // leaf (or flower) mode turns the whole plate living: no cyanotype wash
+  // (the sky shows through), brown wood, translucent foliage. Phyllotaxis
+  // stays blue.
+  const leafy = (leaves || flowers) && mode !== "p";
 
   // the chosen wood and foliage — the bark's solid hex, and the leaf's base
   // worn translucent. Shared by the canvas and the SVG so a pressed plate keeps
@@ -1155,7 +1204,8 @@ export default function HortusGrammaticus() {
   const barkColor = (BARK_TINTS[barkTint] ?? BARK_TINTS[0]).hex;
   const leafRgb = oklchToRgb(LEAF_L, LEAF_C, leafHue);
   const leafFillColor = leafTintFill(leafRgb);
-  const leafStrokeColor = leafTintStroke(leafRgb);
+  const flowerRgb = oklchToRgb(LEAF_L, LEAF_C, flowerHue);
+  const flowerFillColor = leafTintFill(flowerRgb);
 
   // render
   useEffect(() => {
@@ -1220,19 +1270,17 @@ export default function HortusGrammaticus() {
       // little translucent green leaves at the branch tips — basic almond
       // shapes pointing the way each twig was heading, see-through so
       // overlapping leaves build up into soft foliage. Only the upper reaches
-      // of the tree get them; the lower trunk stays bare wood.
+      // of the tree get them; the lower trunk stays bare wood. Plain shapes,
+      // no outline — just the fill.
       const drawLeaves = () => {
         if (!leaves || !tips.length) return;
         // proportional to the twig (so a dense fern gets small leaves that
         // don't blob together), but capped so a sparse hand-drawn plant with
-        // very long twigs still gets little basic leaves, not giant ones.
-        const len = Math.min(18 * scale, 28);
-        const wid = Math.min(6 * scale, 9);
+        // very long twigs still gets modest leaves, not giant ones.
+        const len = Math.min(LEAF_LEN * scale, LEAF_LEN_MAX);
+        const wid = Math.min(LEAF_WID * scale, LEAF_WID_MAX);
         const yCut = minY + (maxY - minY) * 0.7 + 0.001; // leaves live above this line
-        ctx.lineCap = "round";
         ctx.fillStyle = leafFillColor;
-        ctx.strokeStyle = leafStrokeColor;
-        ctx.lineWidth = Math.max(0.4, Math.min(1, scale * 1.6));
         for (let k = 0; k < tips.length; k += 3) {
           if (tips[k + 1] > yCut) continue;
           const bx = tips[k] * scale + ox;
@@ -1250,13 +1298,39 @@ export default function HortusGrammaticus() {
           ctx.quadraticCurveTo(mx - px * wid, my - py * wid, bx, by);
           ctx.closePath();
           ctx.fill();
-          ctx.stroke();
+        }
+      };
+
+      // little Fell fleurons at the same tips — one shared Path2D, stamped
+      // and transformed per tip (translate to the tip, rotate to the twig's
+      // heading, scale to size, then re-centre the glyph on its own box).
+      // Plain shapes, no outline — just the fill.
+      const drawFlowers = () => {
+        if (!flowers || !tips.length) return;
+        const path = getFleuronPath2D();
+        const size = Math.min(FLOWER_SIZE * scale, FLOWER_SIZE_MAX);
+        const s = size / FLEURON_BOX.w;
+        const yCut = minY + (maxY - minY) * 0.7 + 0.001;
+        ctx.fillStyle = flowerFillColor;
+        for (let k = 0; k < tips.length; k += 3) {
+          if (tips[k + 1] > yCut) continue;
+          const bx = tips[k] * scale + ox;
+          const by = tips[k + 1] * scale + oy;
+          const ang = tips[k + 2];
+          ctx.save();
+          ctx.translate(bx, by);
+          ctx.rotate(ang + Math.PI / 2);
+          ctx.scale(s, s);
+          ctx.translate(-FLEURON_BOX.cx, -FLEURON_BOX.cy);
+          ctx.fill(path);
+          ctx.restore();
         }
       };
 
       if (!animate || n < 60) {
         drawRange(0, n);
         drawLeaves();
+        drawFlowers();
       } else {
         const frames = 85;
         const chunk = Math.max(1, Math.ceil(n / frames));
@@ -1266,7 +1340,10 @@ export default function HortusGrammaticus() {
           drawRange(i, next);
           i = next;
           if (i < n) rafRef.current = requestAnimationFrame(tick);
-          else drawLeaves();
+          else {
+            drawLeaves();
+            drawFlowers();
+          }
         };
         rafRef.current = requestAnimationFrame(tick);
       }
@@ -1309,7 +1386,7 @@ export default function HortusGrammaticus() {
     }
 
     return () => cancelAnimationFrame(rafRef.current);
-  }, [mode, grown, leaves, leafHue, barkTint, divergence, count, floretSize, dims, reducedMotion]);
+  }, [mode, grown, leaves, leafHue, flowers, flowerHue, barkTint, divergence, count, floretSize, dims, reducedMotion]);
 
   const nearGolden = Math.abs(divergence - GOLDEN) < 0.02;
   const onSquare = Math.abs(angle - 90) < 0.25;
@@ -1485,27 +1562,58 @@ export default function HortusGrammaticus() {
                 >
                   leaves
                 </DrawerAction>
-                {/* the living tree's tints — only once it is in leaf, so the
-                    drawer stays short until there is foliage and wood to dress */}
+                <DrawerAction
+                  onClick={() => setFlowers((v) => !v)}
+                  active={flowers}
+                  dot
+                  width={104}
+                  title="Flowers — little Fell fleurons bloom at the tips"
+                >
+                  flowers
+                </DrawerAction>
+                {/* the living tree's tints — only once it is in leaf or
+                    flower, so the drawer stays short until there is foliage
+                    and wood to dress */}
                 {leafy && (
                   <>
-                    <DrawerCard
-                      label="Leaf"
-                      value={nearestLeafName(leafHue)}
-                      width={178}
-                    >
-                      <input
-                        type="range"
-                        min={0}
-                        max={360}
-                        step={1}
-                        value={leafHue}
-                        onChange={(e) => setLeafHue(+e.target.value)}
-                        className="leaf-hue"
-                        style={{ "--leaf-grad": LEAF_GRAD, width: "100%" }}
-                        aria-label="Leaf colour — hue, muted"
-                      />
-                    </DrawerCard>
+                    {leaves && (
+                      <DrawerCard
+                        label="Leaf"
+                        value={nearestLeafName(leafHue)}
+                        width={178}
+                      >
+                        <input
+                          type="range"
+                          min={0}
+                          max={360}
+                          step={1}
+                          value={leafHue}
+                          onChange={(e) => setLeafHue(+e.target.value)}
+                          className="leaf-hue"
+                          style={{ "--leaf-grad": LEAF_GRAD, width: "100%" }}
+                          aria-label="Leaf colour — hue, muted"
+                        />
+                      </DrawerCard>
+                    )}
+                    {flowers && (
+                      <DrawerCard
+                        label="Flower"
+                        value={nearestLeafName(flowerHue)}
+                        width={178}
+                      >
+                        <input
+                          type="range"
+                          min={0}
+                          max={360}
+                          step={1}
+                          value={flowerHue}
+                          onChange={(e) => setFlowerHue(+e.target.value)}
+                          className="leaf-hue"
+                          style={{ "--leaf-grad": LEAF_GRAD, width: "100%" }}
+                          aria-label="Flower colour — hue, muted"
+                        />
+                      </DrawerCard>
+                    )}
                     <DrawerCard
                       label="Bark"
                       value={BARK_TINTS[barkTint].name}
