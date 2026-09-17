@@ -129,8 +129,20 @@ const BARK_TINTS = [
   { id: "haw", name: "hawthorn", hex: "#7c5a34" }, // ruddy hedge-wood
   { id: "haulm", name: "haulm", hex: "#2e4715" }, // dark olive stalk — the stems of persicarias
 ];
-const leafTintFill = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.25)`;
-const leafTintStroke = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`;
+// Plain filled shapes, no outline — a bit more body than a first wash but
+// still see-through, so overlapping foliage still builds up softly.
+const leafTintFill = (rgb) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.42)`;
+
+// Leaf and flower sizing — proportional to the twig (so a dense fern still
+// gets small foliage that doesn't blob together), capped so a sparse plant
+// with long twigs gets generous but not giant shapes. Shared by the canvas
+// and the SVG export so a pressed plate keeps exactly what's on screen.
+const LEAF_LEN = 24;
+const LEAF_LEN_MAX = 36;
+const LEAF_WID = 8;
+const LEAF_WID_MAX = 12;
+const FLOWER_SIZE = 18;
+const FLOWER_SIZE_MAX = 26;
 
 // The fleuron — a single glyph pip from IM Fell, kept exactly as the type
 // foundry drew it (its own font-unit path, one <path> under 3KB) and only
@@ -1017,12 +1029,12 @@ export default function HortusGrammaticus() {
       );
 
       // the little translucent leaves, if the plate is in leaf — the same
-      // almond quadratics, only above the leaf line.
+      // almond quadratics, only above the leaf line. Plain shapes, no
+      // outline — just the fill, so overlapping foliage stays soft.
       if (leaves && tips.length) {
-        const len = Math.min(18 * scale, 28);
-        const wid = Math.min(6 * scale, 9);
+        const len = Math.min(LEAF_LEN * scale, LEAF_LEN_MAX);
+        const wid = Math.min(LEAF_WID * scale, LEAF_WID_MAX);
         const yCut = minY + (maxY - minY) * 0.7 + 0.001;
-        const lw = Math.max(0.4, Math.min(1, scale * 1.6));
         let leafPaths = "";
         for (let k = 0; k < tips.length; k += 3) {
           if (tips[k + 1] > yCut) continue;
@@ -1039,18 +1051,15 @@ export default function HortusGrammaticus() {
             `<path d="M${f(bx)},${f(by)} Q${f(mx + px * wid)},${f(my + py * wid)} ${f(tx)},${f(ty)} ` +
             `Q${f(mx - px * wid)},${f(my - py * wid)} ${f(bx)},${f(by)} Z"/>`;
         }
-        parts.push(
-          `<g fill="${leafFillColor}" stroke="${leafStrokeColor}" stroke-linecap="round" stroke-width="${f(lw)}">${leafPaths}</g>`
-        );
+        parts.push(`<g fill="${leafFillColor}">${leafPaths}</g>`);
       }
 
       // the same Fell fleurons, stamped as <use> against the one shared
       // glyph in <defs> — a hundred blooms cost one shape, not a hundred.
       if (flowers && tips.length) {
-        const size = Math.min(14 * scale, 20);
+        const size = Math.min(FLOWER_SIZE * scale, FLOWER_SIZE_MAX);
         const s = size / FLEURON_BOX.w;
         const yCut = minY + (maxY - minY) * 0.7 + 0.001;
-        const lw = Math.max(0.4, Math.min(1, scale * 1.6));
         let uses = "";
         for (let k = 0; k < tips.length; k += 3) {
           if (tips[k + 1] > yCut) continue;
@@ -1059,9 +1068,7 @@ export default function HortusGrammaticus() {
           const angDeg = f((tips[k + 2] * 180) / Math.PI + 90);
           uses += `<use href="#fleuron" transform="translate(${bx},${by}) rotate(${angDeg}) scale(${f(s)}) translate(${f(-FLEURON_BOX.cx)},${f(-FLEURON_BOX.cy)})"/>`;
         }
-        parts.push(
-          `<g fill="${flowerFillColor}" stroke="${flowerStrokeColor}" stroke-linecap="round" stroke-width="${f(lw)}">${uses}</g>`
-        );
+        parts.push(`<g fill="${flowerFillColor}">${uses}</g>`);
       }
     }
 
@@ -1197,10 +1204,8 @@ export default function HortusGrammaticus() {
   const barkColor = (BARK_TINTS[barkTint] ?? BARK_TINTS[0]).hex;
   const leafRgb = oklchToRgb(LEAF_L, LEAF_C, leafHue);
   const leafFillColor = leafTintFill(leafRgb);
-  const leafStrokeColor = leafTintStroke(leafRgb);
   const flowerRgb = oklchToRgb(LEAF_L, LEAF_C, flowerHue);
   const flowerFillColor = leafTintFill(flowerRgb);
-  const flowerStrokeColor = leafTintStroke(flowerRgb);
 
   // render
   useEffect(() => {
@@ -1265,19 +1270,17 @@ export default function HortusGrammaticus() {
       // little translucent green leaves at the branch tips — basic almond
       // shapes pointing the way each twig was heading, see-through so
       // overlapping leaves build up into soft foliage. Only the upper reaches
-      // of the tree get them; the lower trunk stays bare wood.
+      // of the tree get them; the lower trunk stays bare wood. Plain shapes,
+      // no outline — just the fill.
       const drawLeaves = () => {
         if (!leaves || !tips.length) return;
         // proportional to the twig (so a dense fern gets small leaves that
         // don't blob together), but capped so a sparse hand-drawn plant with
-        // very long twigs still gets little basic leaves, not giant ones.
-        const len = Math.min(18 * scale, 28);
-        const wid = Math.min(6 * scale, 9);
+        // very long twigs still gets modest leaves, not giant ones.
+        const len = Math.min(LEAF_LEN * scale, LEAF_LEN_MAX);
+        const wid = Math.min(LEAF_WID * scale, LEAF_WID_MAX);
         const yCut = minY + (maxY - minY) * 0.7 + 0.001; // leaves live above this line
-        ctx.lineCap = "round";
         ctx.fillStyle = leafFillColor;
-        ctx.strokeStyle = leafStrokeColor;
-        ctx.lineWidth = Math.max(0.4, Math.min(1, scale * 1.6));
         for (let k = 0; k < tips.length; k += 3) {
           if (tips[k + 1] > yCut) continue;
           const bx = tips[k] * scale + ox;
@@ -1295,22 +1298,20 @@ export default function HortusGrammaticus() {
           ctx.quadraticCurveTo(mx - px * wid, my - py * wid, bx, by);
           ctx.closePath();
           ctx.fill();
-          ctx.stroke();
         }
       };
 
       // little Fell fleurons at the same tips — one shared Path2D, stamped
       // and transformed per tip (translate to the tip, rotate to the twig's
       // heading, scale to size, then re-centre the glyph on its own box).
+      // Plain shapes, no outline — just the fill.
       const drawFlowers = () => {
         if (!flowers || !tips.length) return;
         const path = getFleuronPath2D();
-        const size = Math.min(14 * scale, 20);
+        const size = Math.min(FLOWER_SIZE * scale, FLOWER_SIZE_MAX);
         const s = size / FLEURON_BOX.w;
         const yCut = minY + (maxY - minY) * 0.7 + 0.001;
         ctx.fillStyle = flowerFillColor;
-        ctx.strokeStyle = flowerStrokeColor;
-        ctx.lineWidth = Math.max(0.4, Math.min(1, scale * 1.6));
         for (let k = 0; k < tips.length; k += 3) {
           if (tips[k + 1] > yCut) continue;
           const bx = tips[k] * scale + ox;
@@ -1322,7 +1323,6 @@ export default function HortusGrammaticus() {
           ctx.scale(s, s);
           ctx.translate(-FLEURON_BOX.cx, -FLEURON_BOX.cy);
           ctx.fill(path);
-          ctx.stroke(path);
           ctx.restore();
         }
       };
